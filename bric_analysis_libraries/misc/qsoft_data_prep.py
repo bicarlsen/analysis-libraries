@@ -1,4 +1,4 @@
-
+#!/usr/bin/env python
 # coding: utf-8
 
 # # QCM Data Prep
@@ -19,16 +19,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-import import_ipynb
-import standard_functions as std
-
-from importlib import reload
-
-
-# In[ ]:
-
-
-reload( std )
+from bric_analysis_libraries import standard_functions as std
 
 
 # ## Data Prep
@@ -104,3 +95,9 @@ def import_data( folder, file_pattern = '*.txt' ):
 
 
 # # Work
+
+# In[ ]:
+
+
+
+

@@ -15,7 +15,7 @@ import scipy as sp
 import scipy.constants as phys
 from scipy.optimize import curve_fit
 
-import standard_functions as std
+from bric_analysis_libraries import standard_functions as std
 
 
 # In[1]:

@@ -14,6 +14,7 @@ import sys
 import re
 import glob
 import math
+import logging
 import inspect
 
 import numpy as np
@@ -27,7 +28,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 
-# In[ ]:
+# In[2]:
 
 
 def export_df( df, path, name = 'df' ):
@@ -601,7 +602,7 @@ def import_dataframe( path ):
     return pd.read_csv( path, header = headers, index_col = 0 )
 
 
-# In[10]:
+# In[1]:
 
 
 def df_fit_function( fcn, param_names = None, guess = None, modify = None, **kwargs ):
@@ -642,7 +643,7 @@ def df_fit_function( fcn, param_names = None, guess = None, modify = None, **kwa
                 )
                 
             except RuntimeError as err:
-                print( col, err )
+                logging.warning( col + ': ' + err )
                 continue
 
             # create dictionaries of parameter values and standard deviations 
@@ -663,6 +664,29 @@ def df_fit_function( fcn, param_names = None, guess = None, modify = None, **kwa
         return fits
     
     return fitter
+
+
+
+def fits_to_df( fcn, fits, index ):
+    """
+    Converts a Pandas DataFrame of fit parameters (output from #df_fit_function) to a
+    DataFrame of values.
+    
+    :param fcn: The function used as the fit.
+    :param fits: A DataFrame of fits, as returned from #df_fit_function).
+    :param index: The index values to use.
+    :returns: A DataFrame with each column for each row in the fits, 
+        with values of the function evaluated on the provided index.
+    """
+    for index, fit in fits.iterrows:
+        params = fit.xs( 'value', level = 'metric' )
+
+        fits = inten.xs( 'value', level = 'metric' )
+        i = pl.intensity_gaussian_population( fits.Eg0, fits.sigma, fits.t )
+
+        idata = fits.A* np.array( list( map( i, xdata ) ) )
+        inten = pd.DataFrame( idata, index = meas.index, columns = [ 'intensity' ] )
+    
 
 
 def gradient_threshold( 

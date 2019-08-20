@@ -3,6 +3,8 @@
 
 # # JV Curve Analysis
 
+# ## Imports
+
 # In[6]:
 
 
@@ -16,15 +18,10 @@ import matplotlib.pyplot as plt
 import scipy as sp
 from scipy.optimize import curve_fit
 
-from importlib import reload
-import standard_functions as std
+from bric_analysis_libraries import standard_functions as std
 
 
-# In[ ]:
-
-
-reload( std )
-
+# # Analysis
 
 # In[7]:
 

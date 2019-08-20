@@ -1,4 +1,4 @@
-
+#!/usr/bin/env python
 # coding: utf-8
 
 # # QCM Analysis
@@ -8,21 +8,14 @@
 # In[1]:
 
 
-import numpy as np
-import pandas as pd
 import logging
 
+import numpy as np
+import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-from importlib import reload
-import standard_functions as std
-
-
-# In[2]:
-
-
-reload( std )
+from bric_analysis_libraries import standard_functions as std
 
 
 # # Analysis
@@ -133,3 +126,9 @@ def z_match_mass_change(
 
 
 # # Work
+
+# In[ ]:
+
+
+
+

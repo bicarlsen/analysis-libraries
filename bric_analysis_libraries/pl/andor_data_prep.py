@@ -18,8 +18,7 @@ import math
 import numpy as np
 import pandas as pd
 
-import import_ipynb
-import standard_functions as std
+from bric_analysis_libraries import standard_functions as std
 
 
 # # Data Prep
@@ -156,19 +155,19 @@ def get_metadata_values( file, metadata ):
 # TODO: Handle file metadata from Andor if present in file
 def import_datum( file, metadata = None, reindex = True, cps = False ):
     """
-    Imports data from a single Andor output files
+    Imports data from a single Andor output files.
     
-    :param file: The file path to read
-    :param metadata: Metadata from the file name is turned into MultiIndex columns
+    :param file: The file path to read.
+    :param metadata: Metadata from the file name is turned into MultiIndex columns.
         + If list, use standard keywords to include in index [ 'sample', 'power', 'wavelength', 'time' ]
-        + If Dictionary, keys indicate level name, value is wither the pattern to match
+        + If Dictionary, keys indicate level name, value is either the pattern to match
             or another dictionary with 'search' key being the pattern to match, and additional
             entries matching arguments passed to standard_functions#metadata_from_filename.
-            + Reseserved key 'standard' can be provided with a list value to get standard metadata
-    :param reindex: Use wavelength as index [Default: True] 
+            + Reseserved key 'standard' can be provided with a list value to get standard metadata.
+    :param reindex: Use wavelength as index. [Default: True] 
     :param cps: Converts the data to counts per second. 
         A valid time string of the form XsX must be present.
-    :returns: A Pandas DataFrame with MultiIndexed columns
+    :returns: A Pandas DataFrame with MultiIndexed columns.
     """
     
     data_names = [ 'wavelength', 'counts' ] 
@@ -249,7 +248,14 @@ def import_datum( file, metadata = None, reindex = True, cps = False ):
             
         
         
-def import_data( folder_path, file_pattern = '*.csv', metadata = None, cps = False, interpolate = 'linear', fillna = 0 ):
+def import_data( 
+    folder_path, 
+    file_pattern = '*.csv', 
+    metadata = None, 
+    cps = False, 
+    interpolate = 'linear', 
+    fillna = 0 
+):
     """
     Imports data from Andor output files
     

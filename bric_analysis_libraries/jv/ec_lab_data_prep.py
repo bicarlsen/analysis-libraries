@@ -1,4 +1,4 @@
-
+#!/usr/bin/env python
 # coding: utf-8
 
 # # EC Lab Data Prep
@@ -20,20 +20,7 @@ from collections import OrderedDict
 import numpy as np
 import pandas as pd
 
-import import_ipynb
-import standard_functions as std
-
-
-# In[2]:
-
-
-from importlib import reload
-
-
-# In[7]:
-
-
-reload( std )
+from bric_analysis_libraries import standard_functions as std
 
 
 # ## Data Prep
@@ -520,14 +507,17 @@ def threshold( df, threshold = density_bifurcate ):
     return td
 
 
-# In[1]:
+# In[2]:
 
 
 def split_cycle_data( df, split_time = 10, interpolate = 'linear' ):
     """
     Split data into cycles if a time break of longer than split_time occurs
     """ 
-    names = df.columns.names
+    names = ( df.columns.names 
+             if type( df ) is pd.DataFrame
+             else [] )
+             
     df = df.dropna()
     
     # remove extra levels
@@ -641,4 +631,10 @@ def clean_gradients( df, threshold = 1 ):
 # jv_path = 'data/holder-01/ch1/1-1-1-3temp-dep_06_CV_C16.use'
 # df = import_data( data_path, programs = True )
 # jv_df = import_jv_datum( jv_path, precision = 1e-4 )
+
+
+# In[ ]:
+
+
+
 

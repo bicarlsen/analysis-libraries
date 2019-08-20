@@ -1,4 +1,4 @@
-
+#!/usr/bin/env python
 # coding: utf-8
 
 # # EC Lab Analysis
@@ -14,14 +14,7 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-from importlib import reload
-import standard_functions as std
-
-
-# In[ ]:
-
-
-reload( std )
+from bric_analysis_libraries import standard_functions as std
 
 
 # # Analysis
@@ -62,4 +55,10 @@ def plot_measurement_density( ax, data, name ):
     ax.set_ylim( bottom = 1, top = 1e6 )
     ax.set_title( name, fontsize = 10 )
     ax.set_xlabel( '' )
+
+
+# In[ ]:
+
+
+
 

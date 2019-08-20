@@ -19,14 +19,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from importlib import reload
-import standard_functions as std
-
-
-# In[78]:
-
-
-reload( std )
+from bric_analysis_libraries import standard_functions as std
 
 
 # ## Data Prep
@@ -402,15 +395,6 @@ def assign_temperatures_to_cycles( df, ctrl ):
 
 
 # ## Work
-
-# In[15]:
-
-
-# data = 'data/temp/Ch14_Device14_190611_16h_59m23s_JVs.txt'
-# t = import_jv_datum( data )
-# # t.xs( 'Device14', axis = 1 )
-# t
-
 
 # In[ ]:
 

@@ -1,4 +1,4 @@
-
+#!/usr/bin/env python
 # coding: utf-8
 
 # # Igor JV Curve Analysis
@@ -18,8 +18,7 @@ import math
 import numpy as np
 import pandas as pd
 
-import import_ipynb
-import standard_functions as std
+from bric_analysis_libraries import standard_functions as std
 
 
 # # Data Prep
