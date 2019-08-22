@@ -15,9 +15,9 @@ from bric_analysis_libraries[.<component>] import <module>
 # or
 import bric_analysis_libraries[.<component>].<module>
 ```
-where `<component>` is the name of the component (if needed) and `<module>` is the name of the module. Any modules in the **Standard** component do not require a component name, while modules in all other components do.
+where `<component>` is the name of the component (if needed) and `<module>` is the name of the module. Any modules in the Standard Component do not require a component name, while modules in all other components do.
 
-**Example**
+**Examples**
 ```python
 from bric_analysis_libraries import standard_functions as std
 # or
