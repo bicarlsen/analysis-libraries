@@ -305,7 +305,7 @@ def correct_spectra( df, correction ):
         Grating values are [ '300', '600' ]
     :returns: The corrected data.
     """
-    data_path =  os.path.dirname( __file__ ) + '/data/andor-corrections.pkl'  
+    data_path =  os.path.join( os.path.dirname( __file__ ), 'data', 'andor-corrections.pkl' )
     cdf = pd.read_pickle( data_path )
     
     corrections = cdf.xs( ( 'grating', *correction ), axis = 1 )
@@ -316,9 +316,3 @@ def correct_spectra( df, correction ):
 
 
 # # Work
-
-# In[ ]:
-
-
-
-
