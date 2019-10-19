@@ -139,6 +139,8 @@ def intensity_ideal_population( Eg, t = 300):
             ]
         )
     
+    return intensity
+    
     
 def intensity_gaussian_population( Eg0, sigma, t = 300 ):
     """

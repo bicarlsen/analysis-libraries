@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+
 # coding: utf-8
 
 # # Standard Functions
@@ -81,14 +81,14 @@ def metadata_from_file_name(
     """
     Extract metadata from a file name.
     
-    :param search: A RegExp string to search for with one group to extract.
+    :param search: A RegEx string to search for with one group to extract.
         Delimeters are included automatically.
-        For numeric values see the <is_numeric> argument for details on how to format the regExp. 
+        For numeric values see the <is_numeric> argument for details on how to format the regEx. 
     :param file: The file name to search in
     :param is_numeric: Is the extracted parameter numeric?
         Numeric values take the form of (\d+)?(<decimal>)?(\d+)? where 
             <decimal> is the decimal argument.
-        <search> argument should take the form of a RegExp where the special token 
+        <search> argument should take the form of a RegEx where the special token 
             '<>' is used to indicate where the numeric part of the pattern lies.
             (e.g. 'ex<>nm' will match ex<number>nm )
         A preceeding 'm' will negate the value. 
@@ -130,7 +130,13 @@ def metadata_from_file_name(
         
     
     # use non-matching groups to match hyphen delimeter or beginning or end of string
-    search = '(?:^|(?<={}))'.format( delimeter ) + search + '(?={}|$)'.format( delimeter ) 
+    start = '(?:^|(?<={}))'
+    end = '(?={}|{sep})'.format( '{}', sep = os.path.sep ) if full_path else '(?={}|$)'
+    
+    start = start.format( delimeter )
+    end   = end.format( delimeter )
+    
+    search = start + search + end
     
     match = re.findall( search, file, flags )
     if len( match ) == 0:
@@ -372,7 +378,7 @@ def import_data(
         df.append( data )
         
     if interpolate is not None:
-        df = common_reindex( df, how = 'interpolate', fillna = fillna )
+        df = common_reindex( df, how = interpolate, fillna = fillna )
         
     df = pd.concat( df, axis = 1 ).sort_index( axis = 1 )
     return df
@@ -485,25 +491,42 @@ def find_level_path( groups, key ):
         return False
     
     
-# TODO
-def insert_index_level( df, levels, key_level = 0, axis = 1 ):
+def insert_index_levels( df, levels, names = None, key_level = 0, axis = 1 ):
     """
-    [TODO]
     Insert levels into a MultIndex.
     
     :param df: The DataFrame to modify.
-    :param levels: A dictionary of levels
+    :param levels: List of level values.
+    :param names: List of level names. [Defualt: None]
     """
-    df.columns = pd.MultiIndex.from_tuples(
-        [ ( *levels, *name ) for name in df.columns.values ],
-        names = [ *names, *df.columns.names ]
-    )
+    if not isinstance( levels, list ):
+        levels = [ levels ]
+    
+    if names is None:
+        names = [ None ]* len( levels )
+        
+    elif not isinstance( names, list ):
+        names = [ names ]
+    
+    # create levels
+    col_names = df.columns.values
+    
+    # convert all levels in to tuples, required for single level indexes
+    if not isinstance( col_names[ 0 ], tuple ):
+        col_names = [ ( name, ) for name in col_names ]
+
+    levels = [ 
+        ( *name[ 0: key_level ], *levels, *name[ key_level: ] ) 
+        for name in col_names
+    ]
+    
+    names = [ *names, *df.columns.names ]
+    
+    df.columns = pd.MultiIndex.from_tuples( levels, names = names )
     return df
     
-    
-    
 
-def add_index_levels( df, groups, names, key_level = 0, axis = 1 ):
+def add_index_levels( df, groups, names = None, key_level = 0, axis = 1 ):
     """
     Adds addtional MultiIndex levels to a Pandas DataFrame
     
@@ -512,16 +535,15 @@ def add_index_levels( df, groups, names, key_level = 0, axis = 1 ):
         values a list of current level values in that group.
         Multiple levels can be defined at once using nested dictionaries.
         If None, all current values under key_level are added. 
-        [Default: None]
     :param names: A name or list of names for the new levels. [Default: None]
     :param key_level: The level of the current index which the grouping values exist [Default: Top Level]
     :param axis: The axis to group. 0 for index, 1 for columns [Default: 1]
     :returns: The grouped DataFrame
-    """
-    names = names if ( type( names ) is list ) else [ names ]
+    """    
     grouped = []
     ax = df.axes[ axis ]
     old_names = ax.names
+    names = names if ( type( names ) is list ) else [ names ]
 
     if type( key_level ) is str:
         key_level = names.index( key_level )
@@ -546,7 +568,10 @@ def add_index_levels( df, groups, names, key_level = 0, axis = 1 ):
         grouped.append( data )
 
     grouped = pd.concat( grouped, axis = 1 )
-    grouped.columns = grouped.columns.set_names( names + old_names )
+    
+    if names is not None:
+        grouped.columns = grouped.columns.set_names( names + old_names )
+    
     grouped = grouped.sort_index( axis = axis )
     
     return grouped
@@ -1178,9 +1203,3 @@ def boxplot_groups( df, groups, total = True, show = True ):
 
 
 # # Work
-
-# In[ ]:
-
-
-
-
