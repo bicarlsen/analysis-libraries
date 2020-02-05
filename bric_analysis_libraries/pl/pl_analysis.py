@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+
 # coding: utf-8
 
 # # Photoluminescence Analysis
@@ -13,7 +13,8 @@ import matplotlib.pyplot as plt
 
 import scipy as sp
 import scipy.constants as phys
-from scipy.optimize import curve_fit
+from   scipy import integrate
+from   scipy.optimize import curve_fit
 
 from bric_analysis_libraries import standard_functions as std
 
@@ -21,32 +22,167 @@ from bric_analysis_libraries import standard_functions as std
 # In[1]:
 
 
-def normalize( df ):
+def gaussian_distribution( mu = 0 , sigma = 1, x = None ):
     """
-    Normalize all spectrum
+    A Normal or Gaussian distribution
     
-    :param df: The Pandas DataFrame to normalize
-    :returns: The normalized DataFrame
+    :param mu: The mean, or None [Default: 0]
+    :param sigma: The standard deviation, or None [Default: None]
     """
-    return df.apply( lambda x: x/ x.max() )
+    return np.exp( -np.power( ( x - mu ), 2 )/( 2* np.power( sigma, 2 ) ) )
 
 
-def fwhm( df ):
+def boltzmann_distribution( t = 300, e = None ):
+    """
+    The Boltzmann distribution at a given temperature
+    
+    :param t: The temperature in Kelvin, or None [Default: 300]
+    :param e: The energy in eV, or None [Default: None]
+    :returns: Returns a function describing the Boltmann distribution
+        as a function of energy and or temperature, if either are None;
+        or the value if both are not None
+    """
+    a = phys.physical_constants[ 'electron volt-joule relationship' ][ 0 ] # J
+    k = phys.Boltzmann/ a
+    
+    if ( T is None ) and ( E is None ):
+        # function of energy and temperature
+        boltzmann = lambda E, T: np.exp( -E/( k* T ) )
+        
+    elif ( T is None ) and ( E is not None ):
+        # function of temperature only
+        boltzmann = lambda T: np.exp( -e/( k* T ) )
+        
+    elif ( T is not None ) and ( E is None ):
+        # function of energy only
+        boltzmann = lambda E: np.exp( -E/( k* t ) )
+    
+    else:
+        # both values passed, return value
+        boltzmann = np.exp( -e/( k* t ) )
+    
+    return boltzmann
+
+
+def fermi_distribution( ef = 0, t = 300, e = None ):
+    """
+    The Fermi distribution at a given temperature and Fermi energy 
+    
+    :param ef: The Fermi energy of the system in eV, or None [Default: 0]
+    :param t: The temperature at which to calculate the distribution in K, or None [Default: 300]
+    :param e: The energy at whcih to calculate the distribution in eV, or None [Default: None]
+    :returns: A function representing the Fermi distribution taking temperature and or energy
+        as parameters, or returning a value if both are specified
+    """
+    a = phys.physical_constants[ 'electron volt-joule relationship' ][ 0 ] # J
+    k = phys.Boltzmann/ a
+    
+    if ( ef is None ) and ( t is None ) and ( e is None ):
+        # function of Ef, T, and E
+        fermi = lambda Ef, T, E: np.power( 1 + np.exp( ( E - Ef )/( k* T ) ), -1 )
+    
+    elif ( ef is None ) and ( t is None ) and ( e is not None ):
+        # function of Ef and T
+        fermi = lambda Ef, T: np.power( 1 + np.exp( ( e - Ef )/( k* T ) ), -1 )
+        
+    elif ( ef is None ) and ( t is not None ) and ( e is None ):
+        # function of Ef and E
+        fermi = lambda Ef, E: np.power( 1 + np.exp( ( E - Ef )/( k* t ) ), -1 )
+    
+    elif ( ef is None ) and ( t is not None ) and ( e is not None ):
+        # function of Ef
+        fermi = lambda Ef: np.power( 1 + np.exp( ( e - Ef )/( k* t ) ), -1 )
+    
+    elif ( ef is not None ) and ( t is None ) and ( e is None ):
+        # function of E and T
+        fermi = lambda T, E: np.power( 1 + np.exp( ( E - Ef )/( k* T ) ), -1 )
+        
+    elif ( ef is not None ) and ( t is None ) and ( e is not None ):
+        # function of T
+        fermi = lambda T: np.power( 1 + np.exp( ( e - Ef )/( k* T ) ), -1 )
+        
+    elif ( ef is not None ) and ( t is not None ) and ( e is None ):
+        # function of E
+        fermi = lambda E: np.power( 1 + np.exp( ( E - Ef )/( k* t ) ), -1 )
+    
+    else:
+        # value
+        fermi = n.power( 1 + np.exp( ( e - Ef )/( k* t ) ), -1 )
+    
+    return fermi
+
+
+def dos( e0 = 0, e = None ):
+    """
+    The density of states
+    
+    :param e0: An energy in eV, or None [Default: 0]
+    :param e: An energy in eV, or None [Default: None]
+    :returns: A function that takes in an energy and reference energy and 
+        returns the density of states function or a value
+    """
+    
+    if ( e0 is None ) and ( e is None ):
+        # function of e and e0
+        density = lambda E, E0: np.sqrt( E - E0 )
+            
+    elif ( e0 is None ) and ( e is not None ):
+        # function of e0
+        density = lambda E0: np.sqrt( e - E0 )
+        
+    elif ( e0 is not None ) and ( e is None ):
+        # function of e
+        density = lambda E: np.sqrt( E - e0 )
+        
+    else:
+        # value
+        density = np.sqrt( e - e0 )
+        
+    return density
+    
+# TODO: Multiply functions together
+def population( ef = 0, t = 300, e0 = 0, e = None ):
+    """
+    Returns a function or value representing the distribution of the population at a given energy
+        
+    :param ef: The Fermi energy in eV, or None [Default: 0]
+    :param t: The temperature in K, or None [Default: 300]
+    :param e0: The density of states base energy in eV, or None [ Default: 0 ]
+    :param e: The energy to evaluate the system at, or None [Default: None]
+    :returns: A function representing the population that takes as parameters 
+        the values passed as None.
+        If all values are specified, returns the value directly.
+    """
+    
+    return fermi_distribution( ef, t, e )* boltzmann_distribution( t, e )* dos( e0, e )
+    
+
+
+# In[1]:
+
+
+def fwhm( df, start = None, end = None ):
     """
     Calculates the full width at half max (fwhm)
     
     :param df: The Pandas DataFrame with spectral data to analyze
+    :param start: Lower bound of the search range, or None. [Default: None]
+    :param end: Upper bound of the search range, or None. [Default: None]
     :returns: A Pandas Series containing the full width at half max data
     """
     fwhm = []
     cols = []
+    peaks = peak_position( df, start, end )
+    
     for name, data in df.iteritems():
-        peak = data.idxmax()
-        hm = data.loc[ peak ]/ 2
+        peak = peaks.xs( name )
+        data = data.loc[ start : end ]
+        
+        hm = data.max()/ 2
         hml = abs( data.loc[ :peak ] - hm ).idxmin()
         hmr = abs( data.loc[ peak: ] - hm ).idxmin()
 
-        fwhm.append( hmr - hml )
+        fwhm.append( abs( hmr - hml ) )
         cols.append( name )
     
     if type( df.columns ) is pd.MultiIndex:
@@ -60,48 +196,75 @@ def fwhm( df ):
     return fwhm.rename( 'fwhm' )
 
 
-
-def peak_analysis( df, groups = None ):
+def peak_position( df, start = None, end = None ):
     """
-    Performs analysis on the peak positions of the spectra
+    Finds the peak position of a spectrum. 
+    :param df: A Pandas DataFrame containing the spectrum.
+    :param start: Lower bound of the search range, or None. [Default: None]
+    :param end: Upper bound of the search range, or None. [Default: None]
+    :returns: A Pandas DataSeries container positions of the max.
+    """
+    peak = df.loc[ start : end ].idxmax()
+    if not isinstance( peak, pd.Series ):
+        # single columns passed in, transform back to Series
+        peak = pd.Series( peak, index = df.index, name = 'peak' ).rename( 'peak' )
     
-    :param df: A Pandas DataFrame containing spectrum
-    :param groups: How to group the data based on the DataFrame's index [Default: None]
-    :returns: A Pandas DataFrame containing analysis of the peak positions
+    return peak
+
+
+def integrated_intensity( df, start = None, end = None ):
+    """
+    Calculates the integrated intensity (area under the curve) of a spectrum.
+    
+    :param df: A Pandas DataFrame containing the spectrum.
+    :param start: Lower bound of the integration, or None. [Default: None]
+    :param end: Upper bound of the integration, or None. [Default: None]
+    :returns: A Pandas DataFrame of spectral areas.
+    """
+    df = df.loc[ start : end ]
+    return df.apply( lambda datum: integrate.simps( datum ) ).rename( 'area' )
+
+
+
+def peak_analysis( df, groups = None, start = None, end = None ):
+    """
+    Performs analysis on the peak positions of the spectra.
+    
+    :param df: A Pandas DataFrame containing spectrum.
+    :param groups: How to group the data based on the DataFrame's index. [Default: None]
+    :param start: Lower bound of the search range, or None. [Default: None]
+    :param end: Upper bound of the search range, or None. [Default: None]
+    :returns: A Pandas DataFrame containing analysis of the peak positions.
         If groups is None, return peak and fwhm of each sample [peak, fhwm]
         If groups is not None, return mean and standard deviation of 
         peak position and full width at half max for each group
         [ [peak, fwhm], [mean, std] ]
     """
-    peaks = df.idxmax().rename( 'peak' )
-    fw = fwhm( df )
+    peaks = peak_position( df, start, end )
+    fw    = fwhm( df, start, end )
+    area  = integrated_intensity( df, start, end )
     
     if groups is None:
         # return data sample by sample, no statistics
-        return pd.concat( [ peaks, fw ], axis = 1 )
+        return pd.concat( 
+            [ peaks, fw, area ], 
+            axis = 1, 
+            keys = [ 'peak', 'fwhm', 'area' ] 
+        )
     
     # group analysis, include statistics
     peaks = peaks.groupby( groups )
     fw    = fwhm.groupby(  groups )
+    area  = area.groupby(  groups )
     
     return pd.concat( [ 
-        peaks.mean().rename( ( 'peak', 'mean') ),
-        peaks.std().rename( ( 'peak', 'std' ) ),
+        peaks.mean().rename( ( 'peak', 'mean' ) ),
+        peaks.std().rename(  ( 'peak', 'std' ) ),
         fw.mean().rename( ( 'fwhm', 'mean' ) ),
-        fw.std().rename( ( 'fwhm', 'std' ) )
+        fw.std().rename(  ( 'fwhm', 'std' ) ),
+        area.mean().rename( ( 'area', 'mean' ) ),
+        area.std().rename(  ( 'area', 'std' ) )
     ], axis = 1 )
-
-
-def index_to_energy( df ):
-    """
-    Converts a DataFrame with wavelength index to energy index
-    
-    :param df: The Pandas DataFrame, with wavelength indices in nanometers, to convert
-    :returns: A new DataFrame indexed by energy in eV
-    """
-    edf = df.copy()
-    edf.index = pd.Index( std.wl_to_en( df.index.values ) )
-    return edf.sort_index()
 
 
 # In[1]:
@@ -131,11 +294,11 @@ def intensity_ideal_population( Eg, t = 300):
         beta = 1/( k* t )
         delta = e - Eg
         
-        return np.piecewise( e,
-            [ e > e0 ],
+        return np.piecewise( delta,
+            [ delta > 0 ],
             [
-                lambda e: np.square( delta )* np.exp( -beta* delta ),
-                lambda e: 0
+                lambda x: np.square( x )* np.exp( -beta* x ),
+                lambda x: 0
             ]
         )
     
@@ -168,6 +331,7 @@ def intensity_gaussian_population( Eg0, sigma, t = 300 ):
     Eg0: Center bandgap energy.
     sigma: Standard deviation of bandgap energy.
     beta: Coldness
+    shift: beta sigma^2
     
     
     :param Eg0: Center of the bandgap energy distribution.
@@ -213,7 +377,7 @@ def intensity_gaussian_population( Eg0, sigma, t = 300 ):
     
 
 
-# In[3]:
+# In[1]:
 
 
 def fit_gaussian( df ):
@@ -359,34 +523,30 @@ def fit_intensity_gaussian_population( df, temp = 300 ):
     fw = fwhm( df )
     guess = lambda data: ( 
         10e5* data.max(),    # A 
-        data.idxmax(), # Eg0
+        data.idxmax(),       # Eg0
         fw.loc[ data.name ], # sigma
-        temp           # t
+        temp                 # t
     )
     
-    fit = std.df_fit_function( intensity, guess = guess, bounds = ( 0, np.inf ), maxfev = 1e3 )
+    fit = std.df_fit_function( intensity, guess = guess, bounds = ( 0, np.inf ), maxfev = 1000 )
     return fit( df )
 
 
+def fit_voigt( df ):
+    def voigt( x, alpha, gamma ):
+        """
+        Return the Voigt line shape at x with Lorentzian component HWHM gamma
+        and Gaussian component HWHM alpha.
+        """
+        sigma = alpha / np.sqrt( 2 * np.log( 2 ) )
+
+        return np.real(
+            sp.specialwofz( 
+                ( x + 1j* gamma )/ sigma/ np.sqrt( 2 ) 
+            ) 
+        )/ sigma/ np.sqrt( 2* np.pi )
+    
+    # TODO
+
+
 # # Work
-
-# In[160]:
-
-
-# x = np.linspace( 0.1, 2, 200 )
-# y = intensity_gaussian_population( x, 1, 0.05, appx = False )
-
-# plt.semilogy( x, y ) 
-
-
-# In[152]:
-
-
-# intensity_gaussian_population( np.array([ 1.01, 0.2 ]), 1, 0.01 )
-
-
-# In[ ]:
-
-
-
-

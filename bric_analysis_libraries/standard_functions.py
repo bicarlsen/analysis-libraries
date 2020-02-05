@@ -113,12 +113,10 @@ def metadata_from_file_name(
     if abs_path:
         file = os.path.abspath( file )
         
-    elif full_path:
-        pass
-        
-    else:
+    elif not full_path:
         file = os.path.basename( file )
-        file = os.path.splitext( file )[ 0 ]
+    
+    file = os.path.splitext( file )[ 0 ]
     
     # modify search for delimeters and numeric types
     # if numeric, search for preceeding 'm' and trailing exponential
@@ -130,8 +128,9 @@ def metadata_from_file_name(
         
     
     # use non-matching groups to match hyphen delimeter or beginning or end of string
-    start = '(?:^|(?<={}))'
-    end = '(?={}|{sep})'.format( '{}', sep = os.path.sep ) if full_path else '(?={}|$)'
+    sep = os.path.sep
+    start = '(?:^|{sep}|(?<={}))'.format( '{}', sep = sep ) if full_path else '(?:^|(?<={}))'
+    end   = '(?={}|{sep}|$)'.format( '{}', sep = sep )      if full_path else '(?={}|$)'
     
     start = start.format( delimeter )
     end   = end.format( delimeter )
@@ -262,7 +261,7 @@ def get_files( folder_path = None, file_pattern = None ):
     
     return glob.glob( os.path.join( folder_path, file_pattern ) )
 
-
+# TODO: Handle duplicate index values
 def common_reindex( 
     dfs, 
     index = None, 
@@ -270,8 +269,7 @@ def common_reindex(
     fillna = 0, 
     add_values = None, 
     name = None,
-    threshold = None,
-    threshold_type = 'absolute'
+    duplicates = None
 ):
     """
     Creates a common index across Pandas DataFrames.
@@ -283,6 +281,8 @@ def common_reindex(
     :param fillna: Value to fill NaN values with [Default: 0]
     :param add_values: A list of index values to manually add [Default: None]
     :param name: The index name. If None uses the name of the first DataFrame. [Default: None]
+    :param duplicates: (Not Implemented) Function to reduce duplicate index values, or None to raise Exception.
+        [Default: None]
     :returns: A copy of the DataFrames reindexed as prescribed
     """
     if len( dfs ) == 0:
@@ -368,7 +368,7 @@ def import_data(
     for folder in folder_paths:
         files += get_files( folder, file_pattern )
         
-    if len( files ) == 0:
+    if len( files ) is 0:
         # no files found
         raise RuntimeError( 'No files found.' )
         
@@ -397,6 +397,22 @@ def set_plot_defaults():
     mpl.rc( 'xtick', labelsize = 14 )
     mpl.rc( 'ytick', labelsize = 14 )
     mpl.rc( 'figure', figsize = ( 10, 8 ) )
+    
+
+def save_figure( path, kind = 'png', fig = None ):
+    """
+    Save a figure.
+    
+    :param path: Path to save file.
+    :param kind: Format to save file. [Default: 'png']
+    :param fig: Figure to save. If None, saves current figure.
+        [Default: None]
+    """
+    
+    if fig is None:
+        fig = plt.gcf()
+    
+    fig.savefig( path, format = kind, bbox_inches = 'tight' )
 
 
 # In[8]:
@@ -415,7 +431,64 @@ def get_level_index( df, level, axis = 0 ):
     return names.index( level )
 
 
-def keep_levels( df, level = 1, axis = 1, inplace = False ):
+def keep_levels( df, levels, axis = 1, inplace = False ):
+    """
+    Keeps the given levels of the index.
+    
+    :param df: the DataFrame to modify.
+    :param level: Value or list of levels to keep. Can be an integer or level names.
+        [Default: 1]
+    :param axis: The axis of the index to modify. [Defaut: 1]
+    :param inplace: Modify the DataFrame in place. [Default: False]
+    :returns: The modified DataFrame.
+    :raises ValueError: If invalid level is passed.
+    """
+    
+    def get_vals( elm, indices ):
+        """
+        Gets the values of an element at the given indices.
+        
+        :param elm: An iterable structure.
+        :param indices: Value or list of index values to extract.
+        :returns: Values at the given indices.
+        """
+        t = type( elm ) # remember type
+        vals = [ elm[ ind ] for ind in indices  ] # extract values
+        
+        return t( vals ) # cast type
+        
+    
+    if type( levels ) not in ( list, tuple ):
+        levels = [ levels ]
+    
+    old = df.axes[ axis ]
+    
+    # get index values of levels
+    for index, level in enumerate( levels ):
+        if type( level ) is str:
+            levels[ index ] = get_level_index( df, level, axis = axis )
+    
+    # creat new index, keeping only desired values
+    new = pd.MultiIndex.from_tuples(
+        [ get_vals( vals, levels ) for vals in old.values ],
+        names = get_vals( old.names, levels )
+    )
+    
+    if not inplace:
+        df = df.copy()
+        
+    # replace axis
+    if axis is 0:
+        df.index = new
+        
+    elif axis is 1:
+        df.columns = new
+    
+    return df
+    
+
+
+def drop_outer_levels( df, level = 1, axis = 1, inplace = False ):
     """
     Drops outer levels of a MultiIndex, keeping the inner indices.
     
@@ -425,7 +498,7 @@ def keep_levels( df, level = 1, axis = 1, inplace = False ):
     :param axis: The axis of the index to modify. [Defaut: 1]
     :param inplace: Modify the DataFrame in place. [Default: False]
     :returns: The modified DataFrame.
-    :raises: RuntimeError if invalid level is passed.
+    :raises ValueError: If invalid level is passed.
     """
     if not inplace:
         df = df.copy()
@@ -454,7 +527,7 @@ def keep_levels( df, level = 1, axis = 1, inplace = False ):
         setattr( df, axis, new_index )
         
     else:
-        raise RuntimeError( 'Invalid level {}'.format( level ) )
+        raise ValueError( 'Invalid level {}'.format( level ) )
         
     return df
 
@@ -491,14 +564,23 @@ def find_level_path( groups, key ):
         return False
     
     
-def insert_index_levels( df, levels, names = None, key_level = 0, axis = 1 ):
+def insert_index_levels( df, levels, names = None, key_level = 0, axis = 1, inplace = False  ):
     """
-    Insert levels into a MultIndex.
+    Insert levels into a MultiIndexed DataFrame.
     
     :param df: The DataFrame to modify.
     :param levels: List of level values.
     :param names: List of level names. [Defualt: None]
+    :param key_level: Index of insertion. [Default: 0]
+    :param axis: Axis to insert on. [Default: 1]
+    :param inplace: Transform DataFrame inplace. [Default: False]
+    :returns: Modified DataFrame.
     """
+    if not inplace:
+        df = df.copy()
+    
+    ax = df.axes[ axis ]
+    
     if not isinstance( levels, list ):
         levels = [ levels ]
     
@@ -509,7 +591,7 @@ def insert_index_levels( df, levels, names = None, key_level = 0, axis = 1 ):
         names = [ names ]
     
     # create levels
-    col_names = df.columns.values
+    col_names = ax.values
     
     # convert all levels in to tuples, required for single level indexes
     if not isinstance( col_names[ 0 ], tuple ):
@@ -520,14 +602,30 @@ def insert_index_levels( df, levels, names = None, key_level = 0, axis = 1 ):
         for name in col_names
     ]
     
-    names = [ *names, *df.columns.names ]
+    level_names = ax.names
+    names = [ 
+        *level_names[ :key_level ], 
+        *names, 
+        *level_names[ key_level: ] 
+    ]
     
-    df.columns = pd.MultiIndex.from_tuples( levels, names = names )
+    # set index or columns
+    new_index = pd.MultiIndex.from_tuples( levels, names = names )
+    if axis is 0:
+        df.index = new_index
+    
+    elif axis is 1:
+        df.columns = new_index
+        
+    else:
+        raise ValueError( 'Invalid axis {}'.format( axis ) )
+    
     return df
     
 
 def add_index_levels( df, groups, names = None, key_level = 0, axis = 1 ):
     """
+    (Not Implemented)
     Adds addtional MultiIndex levels to a Pandas DataFrame
     
     :param df: The DataFrame to modify
@@ -536,20 +634,20 @@ def add_index_levels( df, groups, names = None, key_level = 0, axis = 1 ):
         Multiple levels can be defined at once using nested dictionaries.
         If None, all current values under key_level are added. 
     :param names: A name or list of names for the new levels. [Default: None]
-    :param key_level: The level of the current index which the grouping values exist [Default: Top Level]
+    :param key_level: The level of the current index which the grouping values exist [Default: 0]
     :param axis: The axis to group. 0 for index, 1 for columns [Default: 1]
     :returns: The grouped DataFrame
     """    
     grouped = []
     ax = df.axes[ axis ]
     old_names = ax.names
-    names = names if ( type( names ) is list ) else [ names ]
+    names = names if isinstance( names, list ) else [ names ]
 
-    if type( key_level ) is str:
-        key_level = names.index( key_level )
+    if isinstance( key_level, str ):
+        key_level = old_names.index( key_level )
 
     for index in ax:
-        if type( index ) is tuple:
+        if isinstance( index, tuple ):
             key = index[ key_level ]
         
         else:
@@ -627,7 +725,7 @@ def import_dataframe( path ):
     return pd.read_csv( path, header = headers, index_col = 0 )
 
 
-# In[1]:
+# In[ ]:
 
 
 def df_fit_function( fcn, param_names = None, guess = None, modify = None, **kwargs ):
@@ -691,7 +789,6 @@ def df_fit_function( fcn, param_names = None, guess = None, modify = None, **kwa
     return fitter
 
 
-
 def fits_to_df( fcn, fits, index ):
     """
     Converts a Pandas DataFrame of fit parameters (output from #df_fit_function) to a
@@ -714,12 +811,192 @@ def fits_to_df( fcn, fits, index ):
     
 
 
+# In[1]:
+
+
+def mask_from_threshold( 
+    df, 
+    threshold = 3, 
+    deviation = 'std',
+    direction = 0,
+    separation = 0,
+    keep = 'first'
+):
+    """
+    Create mask of indices breaking a threshold.
+    
+    :param df: The DataFrame to threshold.
+    :param threshold: Deviations greater than threshold are masked.
+        [Default: 3]
+    :param deviation: The type of deviation to use. 
+        Values [ 'std', 'error', 'value' ].
+        'std' uses standard deviation.
+        'error' uses deviation from the mean.
+        'value' uses the raw values.
+        [Default: 'std']
+    :param direction: Direction values must pass threshold.
+        +1 for more positive, -1 for more negative, 0 for absolute.
+        [Default: 0]
+    :param separation: Minimum separation between points.
+        [Default: 0]
+    :param keep: Point to keep if multiple are within spearation of eachother,
+        or None to raise an Exception.
+        Values are [ 'first', 'last', 'middle', None ]
+        [Default: 'first']
+    :returns: Indices of values breaking threshold.
+    :raises: RuntimeException if multiple points are within separation of eachother
+        and keep is None.
+    """
+    # setup dataframe and threshold
+    if deviation == 'std':
+        # use standard deviation
+        threshold *= df.std()
+        tdf = ( df - df.mean() ) # standardize data
+        
+    elif deviation == 'error':
+        # use error relative to mean
+        threshold *= df.mean()
+        tdf = ( df - df.mean() ) # standardize data
+
+    elif deviation == 'value':
+        # value threshold 
+        tdf = df.copy()
+        
+    else:
+        raise ValueError( 'Invalid deivation type.' )
+        
+    # get mask from direction
+    if direction == 0:
+        mask = np.where( tdf.abs() > threshold )
+        
+    elif direction == -1:
+        mask = np.where( tdf < threshold )
+        
+    elif direction == 1:
+        mask = np.where( tdf > threshold )
+        
+    else:
+        raise ValueError( 'Invalid direction.' )
+        
+    mask = mask[ 0 ]
+
+    # check separation
+    # find mask points with separation less than specified
+    breaks = []
+    for index in range( 1, len( mask ) ):
+        if ( mask[ index ] - mask[ index - 1 ] ) > separation:
+            # index is start of new mask group
+            breaks.append( index )
+            
+    breaks.append( None ) # include final mask point
+    
+    # break mask into groups
+    pbk = 0
+    groups = []
+    for brk in breaks:
+        groups.append( mask[ pbk: brk ] )
+        pbk = brk
+    
+    # keep group points
+    if keep == 'first':
+        mask = [ group[ 0 ] for group in groups ]
+        
+    elif keep == 'last':
+        mask = [ group[ -1 ] for group in groups ]
+        
+    elif keep == 'middle':
+        mask = [ group[ int( len( group )/ 2 ) ] for group in groups ]
+            
+    elif keep is None:
+        raise RuntimeError( 'Separation violation in mask.' )
+        
+    else:
+        raise ValueError( 'Invalid keep.' )
+    
+    return mask
+
+
+def break_from_mask( df, mask, name = 'cycle', axis = 0, inplace = False ):
+    """
+    Breaks a DataFrame into cycles, given a mask.
+    
+    :param df: A Pandas DataFrame.
+    :param mask: List of indices indicating break position.
+    :param name: Name to assign to new index. [Default: 'cycle']
+    :param axis: Axis to combine breaks. [Default: 0]
+    :param inplace: Modify DataFrame inplace. [Default: False]
+    :returns: Pandas DataFrame split into cycles.
+    """
+    if not inplace:
+        df = df.copy()
+    
+    ax = df.axes[ axis ]
+    names = ( name, *ax.names )
+    
+    mask = np.append( mask, None )
+    if not ( 0 in mask ): 
+        mask = np.insert( mask, 0, None )
+    
+    cycles = [
+        df.iloc[ mask[ index ] : mask[ index + 1 ] ]
+        for index in range( len( mask ) - 1 )
+    ]
+    
+    # add cycle header
+    for cycle, data in enumerate( cycles ):
+        d_ax = data.axes[ axis ]
+        
+        headers = (
+            [ ( cycle, *head_val ) for head_val in d_ax.values ]
+            if isinstance( ax, pd.MultiIndex ) else
+            [ ( cycle, head_val ) for head_val in d_ax.values ]
+        )
+        
+        headers = pd.MultiIndex.from_tuples(
+            headers, names = names
+        )
+        
+        if axis is 0:
+            data.index = headers
+            
+        else:
+            data.columns = headers
+    
+    cycles = pd.concat( cycles, axis = axis )
+    return cycles
+
+
+def align_cycles( df, name = 'cycles' ):
+    """
+    Moves cycles from columns to index, adjusting times.
+    
+    :param df: DataFrame with cycles.
+    :param name: Name of the index to align. [Default: 'cycles']
+    :returns: DataFrame with time aligned in index by scan.
+    """
+    cycles = []
+    time = 0
+    for cycle, data in df.groupby( level = name, axis = 1 ):
+        data.index = data.index + time
+        time = data.index.max()
+
+        data = data.dropna()
+        data.columns = data.columns.droplevel( name )
+        data = std.insert_index_levels( data, cycle, name, axis = 0 )
+
+        cycles.append( data )
+
+    cycles = pd.concat( cycles, axis = 0 ).sort_index( 0 )
+    return cycles
+
+
 def gradient_threshold( 
     df, 
     div = 'slope', 
     threshold = -1, 
     calc = 'error',
-    window = 5
+    window = 5,
+    derivative = 1
 ):
     """
     Thresholds data based on the local curvature.
@@ -754,7 +1031,6 @@ def gradient_threshold(
         # compute error threshold
         threshold = threshold* grads.rolling( window = window ).mean().abs()
         grads = grads.abs()
-        print( threshold )
         df = df.where( grads < threshold )
     
     else:
@@ -855,10 +1131,66 @@ def break_and_align(
             cycles.append( cycle )
             pib = ib
 
-    cycles =  pd.concat( cycles, axis = 1 )
+    cycles = pd.concat( cycles, axis = 1 )
     return cycles
 
 
+
+
+def break_from_gradient( 
+    df, 
+    threshold = -1, 
+    calc = 'error',
+    derivative = 1,
+    window = 5,
+    **kwargs
+):
+    """
+    Thresholds data based on the local curvature.
+    
+    :param df: The DataFrame to threshold.
+    :param div: The type of derivative to examine. Use 'slope' or 'curvature'. [Default: slope]
+    :param threshold: [Default: -1]
+    :param calc: The type of threshold to use. 
+        Use 'absolute' or 'error'. [Default: error]
+    :param derivative: Number of derivatives to compute. [Default: 1]
+    :param window: Window width to calculate average gradient for error calculation.
+        [Default: 5]
+    :param kwargs: Parameters passed to #break_from_mask.
+    :returns: Thresholded DataFrame
+    """
+    def compute_grads( df ):
+        diffs = df.diff() 
+    
+        # calculate x-axis differences
+        runs = diffs.index.values
+        runs = np.reshape( runs, ( runs.shape[ 0 ], 1 ) )
+        runs = np.repeat( runs, diffs.shape[ 1 ] , axis = 1 )
+        grads = diffs/ runs
+        
+        return grads
+    
+    
+    grads = df
+    for _ in range( derivative ):
+        grads = compute_grads( grads )
+    
+    if calc == 'error':
+        # compute error threshold
+        threshold = threshold* grads.rolling( window = window ).mean().abs()
+        grads = grads.abs()
+        mask = df.where( grads > threshold )
+    
+    else:
+        # absolute threshold
+        if threshold > 0:
+            mask = df.where( grads > threshold )
+
+        if threshold < 0:
+            mask = df.where( grads < threshold )
+        
+    df = break_from_mask( df, mask, **kwargs )
+    return df
 
 
 #-------------------------------------- TODO ------------------------------------
@@ -918,168 +1250,44 @@ def idxnearest( df, val ):
     
 
 
-# In[12]:
-
-
-def wl_to_en( l ):
-    """
-    Converts a wavelength, given in nm, to an energy in eV
-    
-    :param l: The wavelength to convert, in nm
-    :returns: The corresponding energy in eV
-    """
-    a = phys.physical_constants[ 'electron volt-joule relationship' ][ 0 ] # J
-    return phys.Planck* phys.c/( a* l* 1e-9 )
-
-
-def en_to_wl( e ):
-    """
-    Converts an energy, given in eV, to a wavelength
-    
-    :param e: The energy to convert, in eV
-    :returns: The corresponding wavelength in nm
-    """
-    a = phys.physical_constants[ 'electron volt-joule relationship' ][ 0 ] # J
-    return 1e9* phys.Planck* phys.c/( a* e )
-
-
-def gaussian_distribution( mu = 0 , sigma = 1, x = None ):
-    """
-    A Normal or Gaussian distribution
-    
-    :param mu: The mean, or None [Default: 0]
-    :param sigma: The standard deviation, or None [Default: None]
-    """
-    return np.exp( -np.power( ( x - mu ), 2 )/( 2* np.power( sigma, 2 ) ) )
-
-
-def boltzmann_distribution( t = 300, e = None ):
-    """
-    The Boltzmann distribution at a given temperature
-    
-    :param t: The temperature in Kelvin, or None [Default: 300]
-    :param e: The energy in eV, or None [Default: None]
-    :returns: Returns a function describing the Boltmann distribution
-        as a function of energy and or temperature, if either are None;
-        or the value if both are not None
-    """
-    a = phys.physical_constants[ 'electron volt-joule relationship' ][ 0 ] # J
-    k = phys.Boltzmann/ a
-    
-    if ( T is None ) and ( E is None ):
-        # function of energy and temperature
-        boltzmann = lambda E, T: np.exp( -E/( k* T ) )
-        
-    elif ( T is None ) and ( E is not None ):
-        # function of temperature only
-        boltzmann = lambda T: np.exp( -e/( k* T ) )
-        
-    elif ( T is not None ) and ( E is None ):
-        # function of energy only
-        boltzmann = lambda E: np.exp( -E/( k* t ) )
-    
-    else:
-        # both values passed, return value
-        boltzmann = np.exp( -e/( k* t ) )
-    
-    return boltzmann
-
-
-def fermi_distribution( ef = 0, t = 300, e = None ):
-    """
-    The Fermi distribution at a given temperature and Fermi energy 
-    
-    :param ef: The Fermi energy of the system in eV, or None [Default: 0]
-    :param t: The temperature at which to calculate the distribution in K, or None [Default: 300]
-    :param e: The energy at whcih to calculate the distribution in eV, or None [Default: None]
-    :returns: A function representing the Fermi distribution taking temperature and or energy
-        as parameters, or returning a value if both are specified
-    """
-    a = phys.physical_constants[ 'electron volt-joule relationship' ][ 0 ] # J
-    k = phys.Boltzmann/ a
-    
-    if ( ef is None ) and ( t is None ) and ( e is None ):
-        # function of Ef, T, and E
-        fermi = lambda Ef, T, E: np.power( 1 + np.exp( ( E - Ef )/( k* T ) ), -1 )
-    
-    elif ( ef is None ) and ( t is None ) and ( e is not None ):
-        # function of Ef and T
-        fermi = lambda Ef, T: np.power( 1 + np.exp( ( e - Ef )/( k* T ) ), -1 )
-        
-    elif ( ef is None ) and ( t is not None ) and ( e is None ):
-        # function of Ef and E
-        fermi = lambda Ef, E: np.power( 1 + np.exp( ( E - Ef )/( k* t ) ), -1 )
-    
-    elif ( ef is None ) and ( t is not None ) and ( e is not None ):
-        # function of Ef
-        fermi = lambda Ef: np.power( 1 + np.exp( ( e - Ef )/( k* t ) ), -1 )
-    
-    elif ( ef is not None ) and ( t is None ) and ( e is None ):
-        # function of E and T
-        fermi = lambda T, E: np.power( 1 + np.exp( ( E - Ef )/( k* T ) ), -1 )
-        
-    elif ( ef is not None ) and ( t is None ) and ( e is not None ):
-        # function of T
-        fermi = lambda T: np.power( 1 + np.exp( ( e - Ef )/( k* T ) ), -1 )
-        
-    elif ( ef is not None ) and ( t is not None ) and ( e is None ):
-        # function of E
-        fermi = lambda E: np.power( 1 + np.exp( ( E - Ef )/( k* t ) ), -1 )
-    
-    else:
-        # value
-        fermi = n.power( 1 + np.exp( ( e - Ef )/( k* t ) ), -1 )
-    
-    return fermi
-
-
-def dos( e0 = 0, e = None ):
-    """
-    The density of states
-    
-    :param e0: An energy in eV, or None [Default: 0]
-    :param e: An energy in eV, or None [Default: None]
-    :returns: A function that takes in an energy and reference energy and 
-        returns the density of states function or a value
-    """
-    
-    if ( e0 is None ) and ( e is None ):
-        # function of e and e0
-        density = lambda E, E0: np.sqrt( E - E0 )
-            
-    elif ( e0 is None ) and ( e is not None ):
-        # function of e0
-        density = lambda E0: np.sqrt( e - E0 )
-        
-    elif ( e0 is not None ) and ( e is None ):
-        # function of e
-        density = lambda E: np.sqrt( E - e0 )
-        
-    else:
-        # value
-        density = np.sqrt( e - e0 )
-        
-    return density
-    
-# TODO: Multiply functions together
-def population( ef = 0, t = 300, e0 = 0, e = None ):
-    """
-    Returns a function or value representing the distribution of the population at a given energy
-        
-    :param ef: The Fermi energy in eV, or None [Default: 0]
-    :param t: The temperature in K, or None [Default: 300]
-    :param e0: The density of states base energy in eV, or None [ Default: 0 ]
-    :param e: The energy to evaluate the system at, or None [Default: None]
-    :returns: A function representing the population that takes as parameters 
-        the values passed as None.
-        If all values are specified, returns the value directly.
-    """
-    
-    return fermi_distribution( ef, t, e )* boltzmann_distribution( t, e )* dos( e0, e )
-    
-
-
 # In[13]:
+
+
+def index_from_counter( counter, rows, cols ):
+    """
+    Get the row and column of a matrix form a counter.
+    
+    :param counter: Counter.
+    :param rows: Number of rows in matrix.
+    :param cols: Number of columns in matrix.
+    :returns: ( row, column ) of counter.
+    """
+    
+    row = int( np.floor( counter / cols ) )
+    col = int( counter % cols )
+    
+    return ( row, col )
+
+
+def ax_from_counter( counter, axs ):
+    """
+    Gets an axis from an array of axes based on a counter.
+    
+    :param counter: Counter.
+    :param axs: Matrix of axes.
+    :returns: Axis.
+    """
+    row, col = index_from_counter( counter, *axs.shape )
+        
+    if len( axs.shape ) == 1:
+        # only rows
+        ax = ax[ row ]
+
+    else:
+        # rows and cols
+        ax = axs[ row, col ]
+        
+    return ax
 
 
 def plot_levels( plot, df, show = True, level = 'metrics', axis = 1, **fig_args ):
@@ -1089,7 +1297,7 @@ def plot_levels( plot, df, show = True, level = 'metrics', axis = 1, **fig_args 
     :param plot: A function that receives a Pandas DataSeries and axis to plot it on ( ax, data, name ).
     :param df: The DataFrame to plot.
     :param show: Show the plot. [Defualt: True]
-    :param level: Which level to iterate over. [Default: metrics]
+    :param level: Which level to iterate over. [Default: 'metrics']
     :param axis: The axis to iterate over. [Default: 'columns']
     :param fig_args: Keyword arguments passed to plt.subplot().
     :returns: The Figure and Axes of the plot as a tuple ( fig, axs ).
@@ -1112,17 +1320,7 @@ def plot_levels( plot, df, show = True, level = 'metrics', axis = 1, **fig_args 
     index = 0
     
     for name, data in groups:
-        row = int( np.floor( index/ cols ) )
-        col = int( index% cols )
-        
-        if len( axs.shape ) == 1:
-            # only rows
-            ax = ax[ row ]
-            
-        else:
-            # rows and cols
-            ax = axs[ row, col ]
-        
+        ax = ax_from_counter( index )
         plot( ax, data, name )
         index += 1
         
