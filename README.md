@@ -5,7 +5,7 @@
 An assortment of analysis libraries.
 
 ## Components
-There are four components of the libraries divided by experiemnt type. Each component has data prep modules to prepare the data from different softwares into a canonical form. The prepared data can then be anlayzed with the analysis modules.
+There are five components of the libraries divided by experiemnt type. Each component has data prep modules to prepare the data from different softwares into a canonical form. The prepared data can then be anlayzed with the analysis modules.
 
 **Use**
 
@@ -98,6 +98,26 @@ Data prep for PL experiments from Ocean Optics.
 > Module name: `pl_analysis`
 
 Analysis of PL experiments.
+
+---
+
+### SCAPS Component
+> Component name: `scaps`
+
+#### JV
+> Module name: `iv`
+
+Formats IV data into Pandas DataFrames.
+
+#### Energy Band
+> Module name: `eb`
+
+Formats energy band data into Pandas DataFrames.
+
+#### General
+> Module name: `gnr`
+
+Formats general data into Pandas DataFrames.
 
 ---
 

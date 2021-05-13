@@ -33,8 +33,7 @@ def import_datum( file, reindex = True, sep = ',' ):
     
     :param file: The file path to load.
     :param reindex: Set time as DataFrame Index. [Default: True]
-    :param sep: The data seperator. [Default: ,]
-    :param
+    :param sep: The data seperator. [Default: ',']
     :returns: A Pandas DataFrame.
     """
     # parse header
@@ -89,15 +88,7 @@ def import_data( folder, file_pattern = '*.txt' ):
     
     :param folder: Folder path containing the data files.
     :param file_pattern: File pattern of data files, in glob format. [Default: *.txt]
-    :returns: DataFrame containg imported data.
+    :returns: DataFrame containing imported data.
     """
     return std.import_data( import_datum, folder, file_pattern = file_pattern )
-
-
-# # Work
-
-# In[ ]:
-
-
-
 
