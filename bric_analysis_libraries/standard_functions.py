@@ -6,9 +6,6 @@
 
 # # Imports
 
-# In[1]:
-
-
 import os
 import sys
 import re
@@ -17,6 +14,7 @@ import math
 import logging
 import inspect
 import warnings
+import functools as ftools
 
 import numpy as np
 import pandas as pd
@@ -29,7 +27,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 
-# In[2]:
+# ## Helper functions
 
 
 def export_df( df, path, name = 'df' ):
@@ -43,9 +41,6 @@ def export_df( df, path, name = 'df' ):
     path = os.path.join( path, name )
     df.to_csv( path + '.csv' )
     df.to_pickle( path + '.pkl' )
-
-
-# In[7]:
 
 
 def set_plot_defaults():
@@ -76,7 +71,7 @@ def save_figure( path, kind = 'png', fig = None ):
     fig.savefig( path, format = kind, bbox_inches = 'tight' )
 
 
-# In[26]:
+# ## File functions
 
 
 def file_shape( file, sep = ',' ):
@@ -255,7 +250,6 @@ def metadata_from_file_name(
         return match[ group ]
     
     
-    
 def get_metadata_values( file, metadata ):
     """
     Gets metadata values from a file path.
@@ -270,9 +264,6 @@ def get_metadata_values( file, metadata ):
         headers[ name ] = metadata_from_file_name( search, file )
 
     return headers
-
-
-# In[6]:
 
 
 def get_files( folder_path = None, file_pattern = None ):
@@ -340,7 +331,7 @@ def import_data(
     return df
 
 
-# In[ ]:
+# ## DataFrame functions
 
 
 def downsample( df, method, value, how = 'linear' ):
@@ -450,9 +441,6 @@ def set_index_from_multicolumn( df, key, how = 'linear', fillna = 0, inplace = F
     tdf.columns = tdf.columns.droplevel( 'metrics' )
     
     return ( None if inplace else tdf )
-
-
-# In[8]:
 
 
 def get_level_index( df, level, axis = 0 ):
@@ -729,9 +717,6 @@ def enumerate_duplicate_key( df, level = 0, axis = 1 ):
         names[ indices[ 1 ] ] = names[ indices[ 1 ] ] + '-{}'.format( index )
 
 
-# In[9]:
-
-
 def import_dataframe( path ):
     """
     Creates a Pandas DataFrame from a csv file generated from the import_data() function
@@ -760,7 +745,7 @@ def import_dataframe( path ):
     return pd.read_csv( path, header = headers, index_col = 0 )
 
 
-# In[ ]:
+# DataFrame data functions
 
 
 def df_fit_function( fcn, param_names = None, guess = None, modify = None, **kwargs ):
@@ -856,8 +841,41 @@ def fits_to_df( fcn, fits, index ):
         inten = pd.DataFrame( idata, index = meas.index, columns = [ 'intensity' ] )
     
 
+def df_distance_from( 
+    df, 
+    origin, 
+    axis = 0, 
+    distance = lambda t, x: np.sum( np.square( x - t ) )
+):
+    """
+    Sort a DataFrame based on distance from the origin.
+    
+    :param df: Pandas DataFrame.
+    :param origin: DataFrame, Series, or dictionary representing the origin.
+    :param axis: Axis to sort. [Default: 0]
+    :param distance: Distance function to use. 
+        Should have signature ( origin, data ) and return a distance.
+        origin and data are both Pandas Series.
+        [Default: Squared Euclidian distance]
+    :returns: Series of distances.
+    """
+    if isinstance( origin, pd.DataFrame ):
+        origin = origin.squeeze()
+        
+    else:
+        origin = pd.Series( origin )
+        
+    o_distance = ftools.partial( distance, origin )
+    distances = ( 
+        df.apply( o_distance )
+        if isinstance( df, pd.Series ) else
+        df.apply( o_distance, axis = ( axis + 1 )% 2 )
+    )
+    
+    return distances
 
-# In[1]:
+
+# ## Mask functions
 
 
 def smooth_mask( mask, window = 10 ):
@@ -1064,6 +1082,8 @@ def align_cycles( df, name = 'cycles' ):
 
     cycles = pd.concat( cycles, axis = 0 ).sort_index( 0 )
     return cycles
+
+# ## DataFrame calculus
 
 
 def gradient_threshold( 
@@ -1332,8 +1352,6 @@ def df_grad( series ):
 
 # ## Plots
 
-# In[13]:
-
 
 def index_from_counter( counter, rows, cols ):
     """
@@ -1514,10 +1532,196 @@ def temperature_plot_rainbow( df, colorbar = True, **kwargs ):
     return ( fig, ax )
 
 
-# # Work
+def outer_plot(
+    inner_plot,
+    df, 
+    outer_axes, 
+    outer_logx = False,
+    outer_logy = False,
+    normalize_inner_axes = True,
+    axes_scale = 1,
+    ax = None,
+    **kwargs
+):
+    """
+    2D plot of Axes.
+    
+    :param inner_plot: Function to plot data on inner axes.
+        Function should have signature ( ax, data, name, outer_axes ).
+    :param df: DataFrame.
+    :param outer_axes: ( x, y ) tuple of names of outer axes labels.
+    :param outer_logx: Log scale for outer x-axis. [Default: False]
+    :param outer_logy: Log scale for outer x-axis. [Default: False]
+    :param normalize_inner_axes: Normalize inner axes to be the same size,
+        otherwise each is made as large as possible. [Default: True]
+    :param axes_scale: Scaling factor of inner axes. [Default: 1]
+    :param ax: Axes to use as outer axes. [Default: None]
+    :params **kwargs: Arguments passed to inner_plot function.
+    :returns: If ax is not None returns a dictionary of inner axes as { ( x, y ): axes },
+        otherwise returns  tuple of ( fig, axes, inner_axes ).
+    """
+    
+    def rescale( val, minimum, maximum ):
+        """
+        Rescale value from 0 to 1.
+        """
+        return ( val - minimum )/( maximum - minimum )
+    
+    
+    # get xy points for inner axes
+    outer_x = df.index.get_level_values( outer_axes[ 0 ] )
+    outer_y = df.index.get_level_values( outer_axes[ 1 ] )
+    o_xy = np.unique( list( zip( outer_x, outer_y ) ), axis = 0 )
+    
+    if outer_logx:
+        outer_x = np.log10( outer_x )
+    
+    if outer_logy:
+        outer_y = np.log10( outer_y )
+    
+    outer_xy = np.unique( list( zip( outer_x, outer_y ) ), axis = 0 )
+    
+    outer_minmax = tuple( 
+        ( np.min( vals ), np.max( vals ) )
+        for vals in zip( *outer_xy )
+    )
+    
+    outer_range = tuple( val[ 1 ] - val[ 0 ] for val in outer_minmax )
 
-# In[ ]:
+    # get distances between inner center points
+    # only compute upper triangle to save computing
+    distances_xy = [
+        [
+            None
+            if i1 <= i0 else
+            ( 
+                abs( p1[ 0 ] - p0[ 0 ] )/ outer_range[ 0 ], 
+                abs( p1[ 1 ] - p0[ 1 ] )/ outer_range[ 1 ]
+            )
+            for i1, p1 in enumerate( outer_xy )
+        ]
+        for i0, p0 in enumerate( outer_xy )
+    ]
+        
+    distances = [
+        [ 
+            None
+            if p is None else
+            math.hypot( *p ) 
+            for p in dist 
+        ]
+        for dist in distances_xy
+    ]
+    
+    if normalize_inner_axes:
+        # normalize inner axes
+        dmin = min( [ d for dist in distances for d in dist if d is not None ] )
+        distances = [ 
+            [ 
+                None if d is None else dmin 
+                for d in dist
+            ]
+            for dist in distances 
+        ]
+        
+    # symmeterize distances
+    distances = np.array( [ 
+        [ 
+            0 if d is None else d 
+            for d in dist
+        ]
+        for dist in distances 
+    ] )
+    distances += distances.transpose()
+    
+    # find min distance for each axes
+    distances = [
+        np.delete( d, i ).min()  # ignore self distances
+        for i, d in enumerate( distances ) 
+    ]
 
+    # find axes positions
+    inner_posdim = tuple( 
+        (
+            rescale( xy[ 0 ], *outer_minmax[ 0 ] ) - distances[ i ]/ 2,
+            rescale( xy[ 1 ], *outer_minmax[ 1 ] ) - distances[ i ]/ 2,
+            distances[ i ]* axes_scale,
+            distances[ i ]* axes_scale
+        )
+        for i, xy in enumerate( outer_xy ) 
+    )
 
+    bounds = tuple( 
+        ( p[ 0 ], p[ 1 ], p[ 0 ] + p[ 2 ], p[ 1 ] + p[ 3 ] ) 
+        for p in inner_posdim
+    )
+    bounds = tuple( zip( *bounds ) )
+    bounds = (
+        ( np.min( bounds[ 0 ] ), np.max( bounds[ 2 ] ) ),  # x
+        ( np.min( bounds[ 1 ] ), np.max( bounds[ 3 ] ) ),  # y
+    )
+    
+    dim_rescale = tuple( 1/( b[ 1 ] - b[ 0 ] ) for b in bounds )
+    
+    inner_posdim = tuple(
+        (
+            rescale( p[ 0 ], *bounds[ 0 ] ),
+            rescale( p[ 1 ], *bounds[ 1 ] ),
+            p[ 2 ]* dim_rescale[ 0 ],
+            p[ 3 ]* dim_rescale[ 1 ] 
+        )
+        for p in inner_posdim
+    )
+    
+    centers = list( zip( *[
+        ( p[ 0 ] + p[ 2 ]/ 2, p[ 1 ] + p[ 3 ]/ 2 )
+        for p in inner_posdim
+    ] ) )
+    
+    inner_posdim = { tuple( vals ): inner_posdim[ i ] for i, vals in enumerate( outer_xy )  }
 
+    # outer axes
+    return_ax = ax is None
+    if ax is None:
+        fig, ax = plt.subplots()
+        
+    ax.set_xticks( np.unique( centers[ 0 ] ) )
+    ax.set_yticks( np.unique( centers[ 1 ] ) )
+    
+    x_labels, y_labels = list( zip( *outer_xy ) )
+    x_labels = np.sort( np.unique( x_labels ) )
+    y_labels = np.sort( np.unique( y_labels ) )
+    if outer_logx:
+        x_labels = [ int( x ) if x.is_integer() else x for x in x_labels ]
+        x_labels = [ f'$10^{{{ x }}}$' for x in x_labels ]
 
+    if outer_logy:
+        y_labels = [ int( y ) if y.is_integer() else y for y in y_labels ]
+        y_labels = [ f'$10^{{{ y }}}$' for y in y_labels ]
+                       
+    ax.set_xticklabels( x_labels )
+    ax.set_yticklabels( y_labels )
+    
+    ax.set_xlabel( outer_axes[ 0 ] )
+    ax.set_ylabel( outer_axes[ 1 ] )
+    
+    # inner plots
+    inner_axes = {}
+    for name, data in df.groupby( level = outer_axes ):
+        oi = [ *name ]
+        if outer_logx:
+            oi[ 0 ] = np.log10( oi[ 0 ] )
+            
+        if outer_logy:
+            oi[ 1 ] = np.log10( oi[ 1 ] )
+
+        ax_dims = inner_posdim[ tuple( oi ) ]
+        in_ax = ax.inset_axes( ax_dims )
+        inner_axes[ ax_dims[ :2 ] ] = in_ax
+        
+        inner_plot( in_ax, data, name, outer_axes, **kwargs )
+        
+    if return_ax:
+        return fig, ax, inner_axes
+    
+    return inner_axes
