@@ -1,4 +1,4 @@
-
+#!/usr/bin/env python
 # coding: utf-8
 
 # # Standard Functions
@@ -16,6 +16,7 @@ import glob
 import math
 import logging
 import inspect
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -44,6 +45,37 @@ def export_df( df, path, name = 'df' ):
     df.to_pickle( path + '.pkl' )
 
 
+# In[7]:
+
+
+def set_plot_defaults():
+    """
+    Set matplotlib plotting defautls
+    """
+    
+    # set plot format defaults
+    mpl.rc( 'font', size = 16 )
+    mpl.rc( 'xtick', labelsize = 14 )
+    mpl.rc( 'ytick', labelsize = 14 )
+    mpl.rc( 'figure', figsize = ( 10, 8 ) )
+    
+
+def save_figure( path, kind = 'png', fig = None ):
+    """
+    Save a figure.
+    
+    :param path: Path to save file.
+    :param kind: Format to save file. [Default: 'png']
+    :param fig: Figure to save. If None, saves current figure.
+        [Default: None]
+    """
+    
+    if fig is None:
+        fig = plt.gcf()
+    
+    fig.savefig( path, format = kind, bbox_inches = 'tight' )
+
+
 # In[26]:
 
 
@@ -66,7 +98,6 @@ def file_shape( file, sep = ',' ):
     return ( rows + 1, cols )
 
 
-
 def metadata_from_file_name( 
     search, 
     file, 
@@ -83,7 +114,7 @@ def metadata_from_file_name(
     
     :param search: A RegEx string to search for with one group to extract.
         Delimeters are included automatically.
-        For numeric values see the <is_numeric> argument for details on how to format the regEx. 
+        For numeric values see the <is_numeric> argument for details on how to format the RegEx. 
     :param file: The file name to search in
     :param is_numeric: Is the extracted parameter numeric?
         Numeric values take the form of (\d+)?(<decimal>)?(\d+)? where 
@@ -261,6 +292,92 @@ def get_files( folder_path = None, file_pattern = None ):
     
     return glob.glob( os.path.join( folder_path, file_pattern ) )
 
+
+def import_data( 
+    import_datum, 
+    folder_paths, 
+    file_pattern = '*', 
+    interpolate = 'linear', 
+    fillna = 0,
+    **kwargs
+):
+    """
+    Imports data from generic output files
+    
+    :param import_datum: The function to import a single data file
+    :param folder_path: The file path, or list of file paths containing the data files.
+    :param file_pattern: A glob pattern to filter the imported files [Default: '*']
+    :param interpolate: How to interpolate data for a common index [Default: linear]
+        Use None to prevent reindexing
+    :param fillna: Value to fill NaN values with [Default: 0]
+    :param kwargs: Additional arguments to pass to the import_datum function.
+    :returns: A Pandas DataFrame with MultiIndexed columns
+    :raises:
+    """
+    
+    # get dataframes from files
+    if type( folder_paths ) is str:
+        # convert single folder path to list
+        folder_paths = [ folder_paths ]
+    
+    files = []
+    for folder in folder_paths:
+        files += get_files( folder, file_pattern )
+        
+    if len( files ) == 0:
+        # no files found
+        raise RuntimeError( 'No files found.' )
+        
+    df = []
+    for file in files:
+        data = import_datum( file, **kwargs ) # run local import datum function
+        df.append( data )
+        
+    if interpolate is not None:
+        df = common_reindex( df, how = interpolate, fillna = fillna )
+        
+    df = pd.concat( df, axis = 1 ).sort_index( axis = 1 )
+    return df
+
+
+# In[ ]:
+
+
+def downsample( df, method, value, how = 'linear' ):
+    """
+    Downsamples a DataFrame.
+    
+    :param method: Method to use for down sampling.
+        + values: Down samples to the given values.
+        + samples: Down samples to the given number of samples, evenly spaced.
+        + resolution: Down samples to the given resoltuion.
+    :param value: Values associated to the down sampling method.
+    :param how: Grouping method. [Default: linear]
+    :returns: Down sampled DataFrame.
+    """
+    df = df.copy()
+    index = df.index
+    
+    if method == 'values':
+        new_index = value
+        
+    elif method == 'samples':
+        new_index = np.linspace( index.min(), index.max(), value )
+        
+    elif method == 'resolution':
+        new_index = np.arange( index.min(), index.max() + value, value )
+    
+    # create common index
+    combined_index = [ df.index.values, new_index ]
+    combined_index = np.unique( np.concatenate( combined_index ) )
+    combined_index = pd.Index( combined_index, name = index.name )
+    
+    # reindex data
+    df = df.reindex( combined_index ).interpolate( method = how, limit_area = 'inside' )
+    df = df.reindex( new_index )
+    return df.dropna()
+
+
 # TODO: Handle duplicate index values
 def common_reindex( 
     dfs, 
@@ -312,7 +429,6 @@ def common_reindex(
     return dfs
 
 
-
 # TODO
 def set_index_from_multicolumn( df, key, how = 'linear', fillna = 0, inplace = False ):
     """
@@ -334,85 +450,6 @@ def set_index_from_multicolumn( df, key, how = 'linear', fillna = 0, inplace = F
     tdf.columns = tdf.columns.droplevel( 'metrics' )
     
     return ( None if inplace else tdf )
-
-
-
-def import_data( 
-    import_datum, 
-    folder_paths, 
-    file_pattern = '*', 
-    interpolate = 'linear', 
-    fillna = 0,
-    **kwargs
-):
-    """
-    Imports data from generic output files
-    
-    :param import_datum: The function to import a single data file
-    :param folder_path: The file path, or list of file paths containing the data files.
-    :param file_pattern: A glob pattern to filter the imported files [Default: '*']
-    :param interpolate: How to interpolate data for a common index [Default: linear]
-        Use None to prevent reindexing
-    :param fillna: Value to fill NaN values with [Default: 0]
-    :param kwargs: Additional arguments to pass to the import_datum function.
-    :returns: A Pandas DataFrame with MultiIndexed columns
-    :raises:
-    """
-    
-    # get dataframes from files
-    if type( folder_paths ) is str:
-        # convert single folder path to list
-        folder_paths = [ folder_paths ]
-    
-    files = []
-    for folder in folder_paths:
-        files += get_files( folder, file_pattern )
-        
-    if len( files ) is 0:
-        # no files found
-        raise RuntimeError( 'No files found.' )
-        
-    df = []
-    for file in files:
-        data = import_datum( file, **kwargs ) # run local import datum function
-        df.append( data )
-        
-    if interpolate is not None:
-        df = common_reindex( df, how = interpolate, fillna = fillna )
-        
-    df = pd.concat( df, axis = 1 ).sort_index( axis = 1 )
-    return df
-
-
-# In[7]:
-
-
-def set_plot_defaults():
-    """
-    Set matplotlib plotting defautls
-    """
-    
-    # set plot format defaults
-    mpl.rc( 'font', size = 16 )
-    mpl.rc( 'xtick', labelsize = 14 )
-    mpl.rc( 'ytick', labelsize = 14 )
-    mpl.rc( 'figure', figsize = ( 10, 8 ) )
-    
-
-def save_figure( path, kind = 'png', fig = None ):
-    """
-    Save a figure.
-    
-    :param path: Path to save file.
-    :param kind: Format to save file. [Default: 'png']
-    :param fig: Figure to save. If None, saves current figure.
-        [Default: None]
-    """
-    
-    if fig is None:
-        fig = plt.gcf()
-    
-    fig.savefig( path, format = kind, bbox_inches = 'tight' )
 
 
 # In[8]:
@@ -478,15 +515,14 @@ def keep_levels( df, levels, axis = 1, inplace = False ):
         df = df.copy()
         
     # replace axis
-    if axis is 0:
+    if axis == 0:
         df.index = new
         
-    elif axis is 1:
+    elif axis == 1:
         df.columns = new
     
     return df
     
-
 
 def drop_outer_levels( df, level = 1, axis = 1, inplace = False ):
     """
@@ -530,7 +566,6 @@ def drop_outer_levels( df, level = 1, axis = 1, inplace = False ):
         raise ValueError( 'Invalid level {}'.format( level ) )
         
     return df
-
 
 
 def find_level_path( groups, key ):
@@ -611,10 +646,10 @@ def insert_index_levels( df, levels, names = None, key_level = 0, axis = 1, inpl
     
     # set index or columns
     new_index = pd.MultiIndex.from_tuples( levels, names = names )
-    if axis is 0:
+    if axis == 0:
         df.index = new_index
     
-    elif axis is 1:
+    elif axis == 1:
         df.columns = new_index
         
     else:
@@ -756,19 +791,30 @@ def df_fit_function( fcn, param_names = None, guess = None, modify = None, **kwa
             data = mdf.xs( col, axis = 1 ).dropna()
             initial = guess( data ) if callable( guess ) else guess
             
-            try:
-                fit = curve_fit(
-                    fcn,
-                    xdata = data.index.values,
-                    ydata = data.values,
-                    p0 = initial,
-                    **kwargs
-                )
-                
-            except RuntimeError as err:
-                logging.warning( col + ': ' + err )
-                continue
+            with warnings.catch_warnings( record = True ) as w:
+                warnings.filterwarnings( 'error' )
+    
+                try:
+                    fit = curve_fit(
+                        fcn,
+                        xdata = data.index.values,
+                        ydata = data.values,
+                        p0 = initial,
+                        **kwargs
+                    )
 
+                except RuntimeError as err:
+                    logging.warning( f'{ col }: { err }' )
+                    continue
+
+                except TypeError as err:
+                    logging.warning( f'{ col }: { err }' )
+                    continue
+                    
+                except Exception as err:
+                    logging.warning( f'{ col }: { err }' )
+                    continue
+            
             # create dictionaries of parameter values and standard deviations 
             params = dict( zip( 
                 [ ( param, 'value' ) for param in param_names ], 
@@ -812,6 +858,36 @@ def fits_to_df( fcn, fits, index ):
 
 
 # In[1]:
+
+
+def smooth_mask( mask, window = 10 ):
+    """
+    Smooths a mask of True/False values.
+    
+    :param mask: Mask to smooth.
+    :param window: Smoothing window. [Default: 10]
+    :returns: Smoothed mask.
+    """
+    # convert False/True to 0/1
+    if isinstance( mask, pd.DataFrame ):
+        if mask.shape[ 1 ] > 1:
+            raise TypeError( 'Mask can not have more than one column.' )
+        
+        df = mask.squeeze( axis = 1 ).astype( int )
+        
+    elif isinstance( mask, pd.Series ):
+        df = mask.apply( int )
+        
+    else:
+        df = pd.Series( map( int, mask ) )
+    
+    # smooth values and convert back to False/True
+    df = df.rolling( window = window ).mean()
+    df = df.fillna( 0 )
+    df = df.apply( round )
+    df = df.apply( bool )
+    
+    return df.values
 
 
 def mask_from_threshold( 
@@ -956,7 +1032,7 @@ def break_from_mask( df, mask, name = 'cycle', axis = 0, inplace = False ):
             headers, names = names
         )
         
-        if axis is 0:
+        if axis == 0:
             data.index = headers
             
         else:
@@ -1135,8 +1211,6 @@ def break_and_align(
     return cycles
 
 
-
-
 def break_from_gradient( 
     df, 
     threshold = -1, 
@@ -1248,7 +1322,15 @@ def idxnearest( df, val ):
     """
     return abs( df - val ).idxmin()
     
+    
+def df_grad( series ):
+    """
+    Gradient function for use of DataFrame#apply.
+    """
+    return np.gradient( series.values, series.index.values )
 
+
+# ## Plots
 
 # In[13]:
 
@@ -1320,7 +1402,7 @@ def plot_levels( plot, df, show = True, level = 'metrics', axis = 1, **fig_args 
     index = 0
     
     for name, data in groups:
-        ax = ax_from_counter( index )
+        ax = ax_from_counter( index, axs )
         plot( ax, data, name )
         index += 1
         
@@ -1398,6 +1480,44 @@ def boxplot_groups( df, groups, total = True, show = True ):
         
     else:
         return axs
+    
+    
+def temperature_plot_rainbow( df, colorbar = True, **kwargs ):
+    """
+    Plots a DataFrame by temperature.
+    
+    :param df: A DataFrame with temperature as the first colum index level.
+    :param colorbar: Whether to include the color bar legend. [Default: True]
+    :param **kwargs: Arguments passed to pandas.DataFrame#plot
+    """
+    
+    fig, ax = plt.subplots()
+    NUM_COLORS = df.shape[ 1 ]
+    cm = plt.get_cmap( 'gist_rainbow' )
+    ax.set_prop_cycle( color = [ cm( float( i / NUM_COLORS ) ) for i in range( NUM_COLORS ) ] )
+
+    df.plot( ax = ax, **kwargs )
+    
+    if colorbar:
+        temp_vals = df.columns.get_level_values( 0 ).values
+        cax = fig.add_axes( [0.92, 0.15, 0.05, 0.7] )
+        cbar = mpl.colorbar.ColorbarBase( 
+            ax = cax, 
+            cmap = cm,  
+            norm = mpl.colors.Normalize( vmin = temp_vals.min(), vmax = temp_vals.max() ),
+            orientation = 'vertical'
+        )
+        
+        cbar_label = df.columns.names[ 0 ]
+        cbar.set_label( cbar_label, labelpad = 15 )
+    
+    return ( fig, ax )
 
 
 # # Work
+
+# In[ ]:
+
+
+
+

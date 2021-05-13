@@ -5,7 +5,7 @@
 
 # ### Imports
 
-# In[1]:
+# In[ ]:
 
 
 import os
@@ -14,16 +14,37 @@ import sys
 import re
 import glob
 import math
+import pkgutil
 
 import numpy as np
 import pandas as pd
 
-from bric_analysis_libraries import standard_functions as std
+from .. import standard_functions as std
 
 
 # # Data Prep
 
-# In[1]:
+# ### Correction Data
+
+# In[ ]:
+
+
+__root_mod_path = os.path.abspath( os.path.join( __file__, '..' ) )
+_data_path = os.path.join( 'data', 'andor' )
+corrections = {}
+
+for v_path in glob.glob( os.path.join( __root_mod_path, _data_path, '*' ) ):
+    version = os.path.basename( v_path )
+    corrections[ version ] = {}
+    
+    for file in glob.glob( os.path.join( __root_mod_path, v_path, '*' ) ):
+        _, t = os.path.splitext( file )
+        t = t[ 1: ]  # remove extension separator
+        
+        corrections[ version ][ t ] = file
+
+
+# In[ ]:
 
 
 # convenience functions for common extractions
@@ -63,7 +84,7 @@ def pressure_from_file_name( file ):
     return std.metadata_from_file_name( pressure_search, file, True, decimal = 'p' )
 
 
-# In[5]:
+# In[ ]:
 
 
 def get_standard_metadata_value( file, metadata ):
@@ -149,7 +170,7 @@ def get_metadata_values( file, metadata ):
         return vals
 
 
-# In[2]:
+# In[ ]:
 
 
 # TODO: Handle file metadata from Andor if present in file
@@ -257,7 +278,7 @@ def import_data(
     fillna = 0 
 ):
     """
-    Imports data from Andor output files
+    Imports data from Andor output files.
     
     :param folder_path: The file path containing the data files
     :param file_pattern: A glob pattern to filter the imported files [Default: '*']

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+
 # coding: utf-8
 
 # # EC Lab Data Prep
@@ -34,7 +34,7 @@ def get_channel_from_file_name( file, prefix = 'C' ):
     """
     :param prefix: The prefix of the channel. [Default: 'C']
     """
-    channel_search = '{}(\d+)'.format( prefix )
+    channel_search = '{}<>'.format( prefix )
     return std.metadata_from_file_name( 
         channel_search, 
         file, 
@@ -45,7 +45,7 @@ def get_channel_from_file_name( file, prefix = 'C' ):
 
 
 def get_holder_from_file_name( file ):
-    holder_search = 'holder\-(\d+)'
+    holder_search = 'holder\-<>'
     return std.metadata_from_file_name( 
         holder_search, 
         file, 
@@ -56,7 +56,7 @@ def get_holder_from_file_name( file ):
 
 
 def get_program_from_file_name( file ):
-    program_search = '(\d+)'
+    program_search = '<>'
     return std.metadata_from_file_name(
         program_search,
         file,
@@ -243,12 +243,17 @@ def import_datum(
     header_pattern = 'Nb header lines : (\d+)'
     header_lines = None
     with open( file, encoding = encoding ) as f:
-        for line in f:    
-            match = re.match( header_pattern, line )
-            if match is not None:
-                # found header line
-                header_lines = int( match.group( 1 ) )
-                break
+        try:
+            for line in f:    
+                match = re.match( header_pattern, line )
+                if match is not None:
+                    # found header line
+                    header_lines = int( match.group( 1 ) )
+                    break
+                    
+        except Exception:
+            print( 'Error in {}'.format( file ) )
+            raise
       
     # read data
     columns = OrderedDict( {
@@ -260,11 +265,15 @@ def import_datum(
         'counter inc.':             'counter inc',
         'time/s':                   'time',
         'control/mA':               'control',
+        'control/V':                'control',
+        'Ewe/V':                    'voltage',
         '<Ewe>/V':                  'voltage',
         'I/mA':                     'current',
+        '<I>/mA':                   'current',
         'dq/mA.h':                  'dq',
         'dQ/mA.h':                  'dQ',
         '(Q-Qo)/mA.h':              '(Q-Qo)',
+        '(Q-Qo)/C':                 '(Q-Qo)',
         'Q charge/discharge/mA.h':  'Q charge/discharge/',
         'half cycle':               'half cycle',
         'Energy charge/W.h':        'energy charge',
@@ -279,15 +288,22 @@ def import_datum(
         'P/W':                      'P/W'
     } )
     
+    
     # check all use_cols are valid
     for col in use_cols:
         if not col in columns.values():
             raise RuntimeError( 'Invalid column {}.'.format( col ) )
- 
+            
+    # get headers in file
+    with open( file, encoding = encoding ) as f:
+        lines = f.readlines()
+        headers = lines[ header_lines - 1 ].strip().split( '\t' )
+        
+    names = [ columns[ header ] for header in headers ]
     df = pd.read_csv( 
         file, 
         sep = '\t', 
-        names = columns.values(), 
+        names = names, 
         skiprows = header_lines, 
         usecols = use_cols 
     )    
@@ -631,10 +647,4 @@ def clean_gradients( df, threshold = 1 ):
 # jv_path = 'data/holder-01/ch1/1-1-1-3temp-dep_06_CV_C16.use'
 # df = import_data( data_path, programs = True )
 # jv_df = import_jv_datum( jv_path, precision = 1e-4 )
-
-
-# In[ ]:
-
-
-
 

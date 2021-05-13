@@ -1,24 +1,24 @@
 import setuptools
 
 with open( 'README.md', 'r' ) as f:
-	long_desc = f.read()
+    long_desc = f.read()
 
 setuptools.setup(
-	name='bric-analysis-libraries',
-	version = '0.0.5',
-	author='Brian Carlsen',
-	author_email = 'carlsen.bri@gmail.com',
-	description = 'An assortment of analysis libraries.',
-	long_description = long_desc,
-	long_description_content_type = 'text/markdown',
-	url = 'https://github.com/bicarlsen/analysis-libraries.git',
-	packages = setuptools.find_packages(),
-	classifiers = [
-		"Programming Language :: Python :: 3",
+    name='bric-analysis-libraries',
+    version = '0.0.6',
+    author='Brian Carlsen',
+    author_email = 'carlsen.bri@gmail.com',
+    description = 'An assortment of analysis libraries.',
+    long_description = long_desc,
+    long_description_content_type = 'text/markdown',
+    url = 'https://github.com/bicarlsen/analysis-libraries.git',
+    packages = setuptools.find_packages(),
+    classifiers = [
+        "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
-	],
-	package_data = {
-		'pl': [ 'data/*' ]
-	}
+    ],
+    package_data = {
+        'pl': [ 'data/*' ]
+    }
 )

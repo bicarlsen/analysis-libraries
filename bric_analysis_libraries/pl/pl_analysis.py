@@ -1,10 +1,13 @@
-
+#!/usr/bin/env python
 # coding: utf-8
 
 # # Photoluminescence Analysis
 
-# In[2]:
+# In[1]:
 
+
+import logging
+from numbers import Number
 
 import pandas as pd
 import numpy as np
@@ -13,10 +16,26 @@ import matplotlib.pyplot as plt
 
 import scipy as sp
 import scipy.constants as phys
-from   scipy import integrate
-from   scipy.optimize import curve_fit
+from   scipy           import integrate
+from   scipy.optimize  import curve_fit
+from   scipy.signal    import deconvolve
+from   scipy.stats     import linregress
 
-from bric_analysis_libraries import standard_functions as std
+from .. import standard_functions as std
+
+
+# In[ ]:
+
+
+def convert_beta_temperature( p ):
+    """
+    Converts beta (coldness) to temperature and vice versa.
+    
+    :param p: Temperature in Kelvin or beta (coldness).
+    :returns: Beta (coldness) if temperature was given, 
+        Temperature in Kelvin if beta was given.
+    """
+    return 1/( phys.physical_constants[ 'Boltzmann constant in eV/K' ][ 0 ]* p )
 
 
 # In[1]:
@@ -103,7 +122,7 @@ def fermi_distribution( ef = 0, t = 300, e = None ):
         
     elif ( ef is not None ) and ( t is not None ) and ( e is None ):
         # function of E
-        fermi = lambda E: np.power( 1 + np.exp( ( E - Ef )/( k* t ) ), -1 )
+        fermi = lambda E: np.power( 1 + np.exp( ( E - ef )/( k* t ) ), -1 )
     
     else:
         # value
@@ -174,13 +193,15 @@ def fwhm( df, start = None, end = None ):
     cols = []
     peaks = peak_position( df, start, end )
     
-    for name, data in df.iteritems():
+    for name, data in df.items():
         peak = peaks.xs( name )
+        if isinstance( peak, pd.DataFrame ) or isinstance( peak, pd.Series ): 
+            peak = peak.values[ 0 ]
+            
         data = data.loc[ start : end ]
-        
         hm = data.max()/ 2
-        hml = abs( data.loc[ :peak ] - hm ).idxmin()
-        hmr = abs( data.loc[ peak: ] - hm ).idxmin()
+        hml = ( data.loc[ :peak ] - hm ).abs().idxmin()
+        hmr = ( data.loc[ peak: ] - hm ).abs().idxmin()
 
         fwhm.append( abs( hmr - hml ) )
         cols.append( name )
@@ -225,7 +246,6 @@ def integrated_intensity( df, start = None, end = None ):
     return df.apply( lambda datum: integrate.simps( datum ) ).rename( 'area' )
 
 
-
 def peak_analysis( df, groups = None, start = None, end = None ):
     """
     Performs analysis on the peak positions of the spectra.
@@ -265,6 +285,77 @@ def peak_analysis( df, groups = None, start = None, end = None ):
         area.mean().rename( ( 'area', 'mean' ) ),
         area.std().rename(  ( 'area', 'std' ) )
     ], axis = 1 )
+
+
+# In[ ]:
+
+
+def extract_tempertaure( 
+    df, 
+    grad_threshold = 40, 
+    curve_threshold = 1000, 
+    side = 'high',
+    mask_window = 75
+):
+    """
+    Finds the temperature coefficient from a PL curve.
+    Performs a linear fit on the log of PL spectra on the low or high energy side.
+    The fit is performed on an area with gradient higher than the given threshold,
+    and curvature less that the given threshold.
+    
+    :param df: DataFrame of PL specra indexed by energy.
+    :param grad_threshold: Minimum gradient threshold. [Default: 40]
+    :param curve_threshold: Maximum curvature threshold. [Default: 1000]
+    :param side: 'low' for low energy, 'high' for high energy. [Default: 'high']
+    :param mask_window: Smoothing window for data mask. [Default: 75]
+    :returns: Dictionary of tuples of ( temperature, linear fit ).
+        If no valid data for a particular dataset vlaue is None. 
+    """
+    logger = logging.getLogger( __name__ )
+
+    # calculate needed data
+    ldf = df.apply( np.log ).dropna( how = 'all' )
+    gdf = ldf.apply( std.df_grad ).abs()
+    cdf = gdf.apply( std.df_grad ).abs()
+    
+    fits = {}
+    for name, data in ldf.items():
+        mask = (
+            data.index < data.idxmax()
+            if side == 'low' else
+            data.index > data.idxmax()
+        )
+        
+        if not np.any( mask ):
+            # no valid data
+            fits[ name ] = None
+            logger.warning( f'No data for { name }.' )
+            continue
+
+        g_mask = gdf[ name ][ mask ] > grad_threshold
+        c_mask = cdf[ name ][ mask ] < curve_threshold
+            
+        g_mask = std.smooth_mask( g_mask, window = mask_window )
+        c_mask = std.smooth_mask( c_mask, window = mask_window )
+    
+        tdf = data[ mask ]
+        tdf = tdf[ g_mask & c_mask ]
+        if tdf.shape[ 0 ] == 0:
+            # no data
+            fits[ name ] = None
+            logger.warning( f'No data for { name }.' )
+            continue
+        
+        # valid data, fit
+        fit = linregress( x = tdf.index.values, y = tdf.values )
+        beta = fit.slope
+        if side == 'high':
+            beta *= -1 
+        
+        temp = convert_beta_temperature( beta )
+        fits[ name ] = ( temp, fit )
+        
+    return fits
 
 
 # In[1]:
@@ -547,6 +638,187 @@ def fit_voigt( df ):
         )/ sigma/ np.sqrt( 2* np.pi )
     
     # TODO
+
+
+# In[ ]:
+
+
+def bandgap_distribution( df, temperature = 300, freq_kernel = None ):
+    """
+    Finds the distribution of bandgaps from the PL spectrum.
+    Deconvolves the ideal crystal PL spectrum from the signal.
+    
+    :param df: Pandas DataFrame of spectrum indexed by energy.
+    :param temperature: Temperature in Kelvin of the sample.
+    :param freq_kernel: Frequency kernel of Fourier Transorm. 
+        If a number cuts frequencies above the given value.
+        If callable should accept a NumPy.array of frequencies and 
+            return an array of the same length indicating the 
+            relative value of each frequency.
+        If None, performs no filtering.
+        [Default: None]
+    :returns: Pandas DataFrame representing band gap distribution.
+    """
+    
+    # sort and normalize
+    df = df.sort_index()/ df.max()
+    
+    # resample signal for equal spacing
+    index = df.index
+    step = np.min( np.diff( index ) )
+    new_index = np.arange( index.min(), index.max() + step, step )
+    combined_index = np.unique( np.concatenate( ( new_index, index.values ) ) )
+    
+    df = df.reindex( combined_index ).interpolate().reindex( new_index )
+
+    # fourier transform data
+    vals = df.values.ravel()
+    ftdf = np.fft.fft( vals )
+
+    # --- get sample frequency
+    freq = np.fft.fftfreq( vals.shape[ -1 ], step )
+    
+    # sample ideal crystal spectrum at same frequency
+    intensity = intensity_ideal_population( 
+        df.index.min(),
+        t = temperature
+    )
+    kernel = intensity( df.index.values )
+    kernel = np.fft.fft( kernel )
+    
+    # deconvolve
+    ftdf = np.divide( ftdf, kernel )
+    
+    # frequency threshold filter
+    if freq_kernel is not None:
+        if isinstance( freq_kernel, Number ):
+            # threhsold is a number
+            sig_freq_kern = ( np.abs( freq ) > freq_kernel )
+            ftdf[ sig_freq_kern ] = 0
+            
+        elif callable( freq_kernel ):
+            sig_freq_kern = freq_kernel( freq )
+            ftdf *= sig_freq_kern
+            
+        else:
+            raise TypeError( 'Invalid frequency kernel.' )
+        
+    # inverse fourier transform
+    iftdf = np.fft.ifft( ftdf )
+    df = pd.Series( iftdf.real, index = new_index )
+    
+    return df
+    
+    
+def absorption_from_bandgap_distribution( df, absorption = None ):
+    """
+    Calculates the absorption curves from a band gap distribution.
+    Convolves the absorption with the band gap distribution.
+    
+    :param df: DataFrame indexed by energy container band gap distribution.
+    :param absorption: Absorption function. 
+        Accepts energy and NumPy array of index energies as parameters.
+        Returns NumPy array of absorption values corresponding to energies of index
+        [Default: ( e - index )^(1/2) / index]
+    :returns: DataFrame of absorption.
+    """
+    
+    if absorption is None:
+        # default absorption
+        def abs_default( energy, index ):
+            energies = np.maximum( eps - index, 0 ) # only take positiv values
+            abs_dos = np.sqrt( energies )
+
+            # account for additional eps term
+            abs_dos = abs_dos/ df.index
+            return abs_dos
+            
+        absorption = abs_default
+
+    
+    df_values = np.nan_to_num( df.values )
+    adf = []
+    for eps in df.index:
+        abs_dos = absorption( eps, df.index )
+        integrand = df_values * abs_dos
+        value = np.trapz( integrand, df.index )
+        
+        adf.append( value )
+        
+    adf = pd.Series( adf )
+    adf.index = df.index.copy()
+    adf = adf.rename( df.name )
+    
+    return adf
+    
+    
+
+def df_bandgap_distributions( df, temperature = 300, temperature_level = None, freq_kernel = None ):
+    """
+    Finds the distribution of bandgaps from the PL spectrum.
+    Deconvolves the ideal crystal PL spectrum from the signal.
+    
+    :param df: Pandas DataFrame of spectrum indexed by energy.
+    :param temperature: Temperature in Kelvin to evaluate the bandgap at.
+        If temperature_level is not None, this is ignored.
+        [Default: 300]
+    :param temperature_level: Index level of temperature information,
+        or None to use a static temperature. [Default: None]
+    :param freq_kernel: Frequency kernel of Fourier Transorm. 
+        If a number cuts frequencies above the given value.
+        If callable should accept a NumPy.array of frequencies and 
+            return an array of the same length indicating the 
+            relative value of each frequency.
+        If None, performs no filtering.
+        [Default: None]
+    :returns: Pandas DataFrame representing band gap distribution.
+    """
+    dists = []
+    for index in df:
+        sample_temp = (
+            temperature
+            if temperature is not None else
+            index[ temperature_level ]
+        )
+        
+        data = df[ index ]
+        data = bandgap_distribution( 
+            data, 
+            temperature = sample_temp, 
+            freq_kernel = freq_kernel 
+        )
+        
+        data = data.rename( index )
+        dists.append( data )
+
+    dists = pd.concat( dists, axis = 1 )
+    dists /= dists.max()
+    
+    return dists
+
+
+
+def df_absorption_from_bandgap_distributions( df, absorption = None ):
+    """
+    Calculates the absorption curves from a bandgap distribution DataFrame.
+    
+    :param df: DataFrame indexed by energy with distribution values.
+    :param absorption: Absorption function or None to use default 
+        (see #absorption_from_bandgap_distribution).
+        [Default: None]
+    :returns: DataFrame indexed by energy of absorption values.
+    """
+    kwargs = {}
+    
+    adf = []
+    for index in df:
+        data = df[ index ]
+        data = absorption_from_bandgap_distribution( data, absorption = absorption )
+        adf.append( data )
+
+    adf = pd.concat( adf, axis = 1 )
+    adf /= adf.max()
+    return adf
 
 
 # # Work

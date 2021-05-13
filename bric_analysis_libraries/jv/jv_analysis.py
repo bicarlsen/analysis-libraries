@@ -5,7 +5,7 @@
 
 # ## Imports
 
-# In[6]:
+# In[1]:
 
 
 import math
@@ -16,6 +16,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 import scipy as sp
+from scipy.stats import linregress
 from scipy.optimize import curve_fit
 
 from bric_analysis_libraries import standard_functions as std
@@ -23,46 +24,79 @@ from bric_analysis_libraries import standard_functions as std
 
 # # Analysis
 
-# In[7]:
+# In[2]:
 
 
-def jv_model_basic( v, a, b, c ):
+def ideal_diode( v, js, vt = 0.026, jp = 0 ):
     """
-    A basic diode equation model giving J(V).
+    The ideal diode equation model giving J(V).
     
-    :param v: The input voltage.
-    :param a: The amplitude.
-    :param b: The exponential factor.
-    :param c: The offset.
-    :returns: a*e^( b* v ) + c
+    :param v: Input voltage.
+    :param js: Reverse bias current.
+    :param vt: Thermal voltage. [Defualt: 0.026]
+    :param jp: Photocurrent. [Default: 0]
+    :returns: js* ( 1 - e^( v/ vt ) ) - jp
     """
-    return a* np.exp( b* v ) + c 
+    return js* ( np.exp( v/ vt ) - 1 ) - jp
 
 
-def extrapolate_jv_curve( df, func = jv_model_basic ):
+def voc_from_ideal_diode_parameters( js, vt, jp ):
+    """
+    Open circuit voltage from ideal diode parameters.
+    
+    :param js: Reverse bias saturation current.
+    :param vt: Thermal voltage.
+    :param jp: Photocurrent.
+    :returns: Open circuit voltage.
+    """
+    voc = vt* np.log( jp/ js + 1 )
+    return voc
+
+
+def fit_jv_data( df, func = ideal_diode, **fitargs ):
+    """
+    Fit DataFrame to a JV model.
+    
+    :param df: DataFrame to fit.
+    :param func: the model to use for extrapolation. [Default: #ideal_diode]
+    :param **fitargs: Arguments passed to standard_functions#fit_fit_function. 
+    :returns: DataFrame of fit parameters.
+    """
+    if 'guess' not in fitargs:
+        # default guess
+        fitargs[ 'guess' ] = lambda x: ( 0, 0.026, x.min() )
+    
+    fit = std.df_fit_function( 
+        ideal_diode, 
+        **fitargs
+    )
+    
+    fits = fit( df )
+    return fits
+
+
+def extrapolate_jv_curve( df, func = ideal_diode, **fitargs ):
     """
     Extrapolates a JV curve using a given model.
     
     :param df: The DataFrame to extrapolate. 
         Should have np.nan values where extrapolation is needed.
-    :param func: the model to use for extrapolation. [Default: Basic Diode Equation]
-    :returns: An extrapolated DAtaFrame and the fitted parameters of the model.
+    :param func: the model to use for extrapolation. [Default: #ideal_diode]
+    :param **fitargs: Arguments passed to standard_functions#fit_fit_function. 
+    :returns: An extrapolated DataFrame and the fitted parameters of the model.
     """
-    df_fit = df.dropna()
-    x_fit = df_fit.index.astype( float ).values
-    y_fit = df_fit.current.values
-
-    guess = ( 1, 1, y_fit.min() )
-    ( coeffs, covar ) = curve_fit( func, x_fit, y_fit, guess )
     
+    fits = fit_jv_data( df, func = func, **fitargs )
+    coeffs = fits.xs( 'value', level = 'metric', axis = 1 )
+        
     # Get the index values for NaNs in the column
     x = df[ pd.isnull( df.current ) ].index.astype( float ).values
     
     # Extrapolate those points with the fitted function
     filled = df.copy()
-    filled.loc[ x, 'current' ] = jv_model( x, *coeffs )
+    filled.loc[ x, 'current' ] = func( x, *coeffs.loc[ 'current' ].values )
     
-    return ( filled, coeffs ) 
+    return ( filled, fits ) 
 
 
 def get_hysteresis_curves( df ):
@@ -201,7 +235,7 @@ def hysteresis_metrics( hysteresis ):
     return metrics
 
 
-# In[9]:
+# In[ ]:
 
 
 def trim_jv_curves( df, fill = np.nan ) :
@@ -254,42 +288,72 @@ def get_mpp( df ):
     return pd.concat( [ vmpp, pmpp, jmpp ], keys = [ 'vmpp', 'pmpp', 'jmpp' ], axis = 1 )
 
 
-def get_jsc( df ):
+def get_jsc( df, fit_window = 20 ):
     """
-    Get the short circuit current
+    Get short circuit currents.
     
-    :param df: A Pandas DataFrame containing JV sweeps
-    :returns: A Pandas Series of short circuit currents
+    :param df: A Pandas DataFrame containing JV sweeps, indexed by voltage.
+    :param fit_window: Window size to extrapolate if needed. [Default: 20]
+    :returns: A Pandas Series of short circuit currents.
     """
-    # TODO: If no 0 index
-    jsc = - df.loc[ 0 ]
+    df = df.sort_index()
+    
+    jsc = pd.Series( index = df.columns, dtype = np.float64 )
+    for name, data in df.items():
+        data = data.dropna()
+        if 0 in data:
+            # jsc in data
+            jsc[ name ] = data[ 0 ]
+            continue
+        
+        dpos = data[ 0: ].dropna()
+        dneg = data[ :0 ].dropna()
+        
+        if ( dpos.shape[ 0 ] and dneg.shape[ 0 ] ):
+            # data on both sides of zero
+            half_window = int( fit_window/ 2 )
+            tdf = pd.concat( [ dneg.iloc[ -half_window: ], dpos.iloc[ :half_window ] ] )
+            
+        else:
+            # one sided data
+            tdf = dpos.iloc[ :fit_window ] if dpos.shape[ 0 ] else dneg.iloc[ -fit_window: ]
+            
+        fit = linregress( tdf.index, tdf.values )
+        jsc[ name ] = fit.intercept
+
     return jsc.rename( 'jsc' )
 
 
-def get_voc( df ):
+def get_voc( df, fit_window = 20 ):
     """
     Get the open circuit voltage
     
-    :param df: A Pandas DataFrame containing JV sweeps
-    :returns: A Pandas Series of open circuit voltages
+    :param df: A Pandas DataFrame containing JV sweeps, indexed by voltage.
+    :param fit_window: Window size to extrapolate if needed. [Default: 20]
+    :returns: A Pandas Series of open circuit voltages.
     """
-    voc = pd.Series( index = df.columns )
-    for col in df:
-        tdf =  df.xs( col, axis = 1 )
-        pos = tdf[ tdf > 0 ].dropna()
-        neg = tdf[ tdf < 0 ].dropna()
-
-        pos_v = pos.idxmin()
-        pos_j = pos.loc[ pos_v ]
-
-        neg_v = neg.idxmax()
-        neg_j = neg.loc[ neg_v ]
-
-        slope = ( pos_j - neg_j )/ ( pos_v - neg_v )
-        voc[ col ] = neg_v - neg_j/ slope
+    df = df.sort_index()
+    
+    voc = pd.Series( index = df.columns, dtype = np.float64 )
+    pos = df[ df > 0 ]
+    neg = df[ df < 0 ]
+    for name, data in df.items():    
+        dpos = pos[ name ].dropna()
+        dneg = neg[ name ].dropna()
+        
+        if ( dpos.shape[ 0 ] and dneg.shape[ 0 ] ):
+            # data on both sides of zero
+            half_window = int( fit_window/ 2 )
+            tdf = pd.concat( [ dneg.iloc[ -half_window: ], dpos.iloc[ :half_window ] ] )
+            
+        else:
+            # one sided data
+            tdf = dneg.iloc[ -fit_window: ] if dneg.shape[ 0 ] else dpos.iloc[ :fit_window ]
+            
+        fit = linregress( tdf.index, tdf.values )
+        voc[ name ] = -fit.intercept/ fit.slope
 
     return voc.rename( 'voc' )
-
 
 
 def get_metrics( df ):

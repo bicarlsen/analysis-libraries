@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # Photoluminescence Analysis
+# # Photoluminescence Data Prep
 
 # In[1]:
 
@@ -15,7 +15,7 @@ import scipy as sp
 import scipy.constants as phys
 from scipy.optimize import curve_fit
 
-from bric_analysis_libraries import standard_functions as std
+from .. import standard_functions as std
 
 
 # In[ ]:
@@ -76,15 +76,22 @@ def index_to_energy( df, scale = False ):
         
         edf = edf.multiply( ratio, axis = 0 ) # multiply counts by normalized ratio
     
-    return edf
+    return edf    
 
 
-def df_to_energy( df ):
+# In[ ]:
+
+
+def correct_spectra( df, correction ):
     """
-    Converts a DataFrame indexed by wavelength to energy.
+    Corrects a spectral DataFrame.
     
-    :param df: DataFrame indexed by wavelength.
-    :returns: DataFrame indexed by energy.
+    :param df: DataFrame of spectra.
+    :param correction: Series of correction with same index type as df.
+    :returns: Corrected DataFrame.
     """
+    _, corr = std.common_reindex( [ df, correction ] )  # match index
+    cdf = df.mul( corr, axis = 0 )
     
+    return cdf
 
