@@ -18,9 +18,6 @@ from scipy.optimize import curve_fit
 from .. import standard_functions as std
 
 
-# In[ ]:
-
-
 def wl_to_en( l ):
     """
     Converts a wavelength, given in nm, to an energy in eV.
@@ -43,17 +40,23 @@ def en_to_wl( e ):
     return 1e9* phys.Planck* phys.c/( a* e )
 
 
-# In[2]:
 
-
-def normalize( df ):
+def normalize( df, baseline = 0.1 ):
     """
     Normalize all spectrum.
     
     :param df: The Pandas DataFrame to normalize.
+    :param baseline: Baseline correction threshold or False for no correction.
+        [Default: 0.1]
     :returns: The normalized DataFrame.
     """
-    return df.apply( lambda x: x/ x.max() )
+    df = df.copy()
+    df /= df.max()
+    if baseline is not False:
+        base = df[ df.abs() < baseline ]
+        df -= base.mean()
+
+    return df
 
 
 def index_to_energy( df, scale = False ):

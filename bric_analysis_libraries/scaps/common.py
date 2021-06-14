@@ -16,12 +16,15 @@ def split_content_header_data( content ):
     :returns: Tuple of ( header, data ).
     :raises RuntimeError: If the data could not be split.
     """
-    split_pattern = '(.*)\*{3} The recorded data \*{3}(.*)'
-    match = re.search( split_pattern, content, re.DOTALL )
-    if match is None:
+    split_pattern = '*** The recorded data ***'
+    try:
+        split = content.index( split_pattern )
+    
+    except ValueError as err:
+        # could not find split string
         raise RuntimeError( 'Could not split content.' )
         
-    return ( match.group( 1 ), match.group( 2 ) )
+    return ( content[ :split ], content[ split + len( split_pattern ): ] )
 
 
 def batch_settings( content ):
@@ -51,3 +54,19 @@ def batch_settings( content ):
         settings[ s_num ] = s_val
     
     return settings
+
+
+def remove_header_units( headers ):
+    """
+    Removes units from headers.
+    Headers are enclosed in parenthesis.
+
+    :param headers: List of headers.
+    :returns: List of headers with units removed.
+    """
+    headers = [ 
+        re.sub( '\(.*\)', '', h ).strip()
+        for h in headers 
+    ]
+
+    return headers

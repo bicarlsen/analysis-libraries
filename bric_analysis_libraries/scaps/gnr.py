@@ -14,6 +14,7 @@ def import_gnr_data( file, separator = '\t' ):
     Import a general data file from SCAPS.
 
     :param file: Path to the data file. Usually a .gnr file.
+    :param separator: Data separator. [Default: '\t']
     :returns: DataFrame representing the data.
     """
 

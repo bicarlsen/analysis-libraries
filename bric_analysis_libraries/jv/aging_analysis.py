@@ -5,8 +5,6 @@
 
 # ### Imports
 
-# In[ ]:
-
 
 import os
 import io
@@ -20,10 +18,3 @@ import numpy as np
 import pandas as pd
 
 from bric_analysis_libraries import standard_functions as std
-
-
-# In[ ]:
-
-
-
-

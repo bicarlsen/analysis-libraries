@@ -5,8 +5,6 @@
 
 # ## Imports
 
-# In[1]:
-
 
 import math
 
@@ -21,9 +19,3 @@ from bric_analysis_libraries import standard_functions as std
 
 
 # # Analysis
-
-# In[ ]:
-
-
-
-

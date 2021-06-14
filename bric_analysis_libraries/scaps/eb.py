@@ -9,32 +9,95 @@ from . import common
 from .. import standard_functions as std
 
 
-def import_eb_data( file, separator = '\t' ):
+def import_eb_data( file, separator = '\t', remove_header_units = True, encoding = 'iso-8859-1' ):
+    """
+    Import an energy band data from SCAPS.
+
+    :param file: Path to the file, usually a .eb file.
+    :param separator: Data separator. [Default: '\t']
+    :param encoding: File encoding. [Default: iso-8859-1]
+    :returns: DataFrame representing the data. 
+    """
+    with open( file, encoding = 'iso-8859-1' ) as f:
+        content = f.read()
+        
+    section_pattern = 'bulk\n\n(.+\n)\n((?:.+\n)+)\n' 
+    match = re.search( section_pattern, content )
+    if match is None:
+        raise RuntimeError( 'Could not find data.' )
+        
+    header = [ h.strip() for h in match.group( 1 ).split( separator ) ]
+    if remove_header_units:
+        header = common.remove_header_units( header )
+
+    data = [ datum for datum in match.group( 2 ).split( '\n' ) if len( datum ) ]
+    data = [ [ float( d ) for d in datum.split( separator ) ] for datum in data ]
+
+    df = pd.DataFrame( data = data, columns = header )
+    df = df.set_index( 'x' if remove_header_units else 'x(um)' )
+    df = df.drop( 'i', axis = 1 )  # remove mesh point index
+    return df
+
+
+def import_interface_data( file, separator = '\t', remove_header_units = True, encoding = 'iso-8859-1' ):
+    """
+    Import an interface data from SCAPS.
+
+    :param file: Path to the file, usually a .eb file.
+    :param separator: Data separator. [Default: '\t']
+    :param encoding: File encoding. [Default: iso-8859-1]
+    :returns: DataFrame representing the interface. 
+    """
+    with open( file, encoding = 'iso-8859-1' ) as f:
+        content = f.read()
+        
+    section_pattern = 'interface\n\n(.+\n)\n((?:.+\n)+)\n?'
+    match = re.search( section_pattern, content )
+    if match is None:
+        raise RuntimeError( 'Could not find data.' )
+        
+    header = [ h.strip() for h in match.group( 1 ).split( separator ) ]
+    if remove_header_units:
+        header = common.remove_header_units( header )
+
+    data = [ datum for datum in match.group( 2 ).split( '\n' ) if len( datum ) ]
+    data = [ [ float( d ) for d in datum.split( separator ) ] for datum in data ]
+
+    df = pd.DataFrame( data = data, columns = header )
+    df = df.set_index( 'IF' )
+    return df
+
+
+def import_batch_eb_data( file, separator = '\t', encoding = 'iso-8859-1' ):
     """
     Import an energy band file from SCAPS.
 
     :param file: Path to the file, usually a .eb file.
+    :param separator: Data separator. [Default: '\t']
+    :param encoding: File encoding. [Default: iso-8859-1]
     :returns: DataFrame representing the data. 
     """
-    with open( file ) as f:
-        h_content, d_content = common.split_content_header_data( f.read() )
-    
+    with open( file, encoding = 'iso-8859-1' ) as f:
+        content = f.read()
+        h_content, d_content = common.split_content_header_data( content )
+
     m_order = metrics_order( h_content )
     h_names = common.batch_settings( h_content )
 
     mesh = mesh_from_content( d_content, names = h_names, separator = separator )
-    mesh = std.insert_index_levels( 
-        mesh, 'x', names = 'metrics', key_level = mesh.columns.shape[ 0 ] 
+    mesh = std.insert_index_levels(
+        mesh, 'x', names = 'metrics', key_level = mesh.columns.shape[ 0 ]
     )
-    
+
     df = [ mesh ]
     sections = metric_sections( d_content, names = h_names )
     for param, data in sections.items():
+        print( 'sec', param )
         tdf = data[ 2 ]
-        tdf = std.insert_index_levels( 
+        tdf = std.insert_index_levels(
             tdf, data[ 0 ], names = 'metrics', key_level = tdf.columns.shape[ 0 ]
         )
-        
+
         df.append( tdf )
     
     df = pd.concat( df, axis = 1 ).sort_index( axis = 1 )
