@@ -104,6 +104,13 @@ Analysis of PL experiments.
 ### SCAPS Component
 > Component name: `scaps`
 
+Functions for analyzing [SCAPS](https://scaps.elis.ugent.be/) simulation results.
+
+#### General
+> Module name: `gnr`
+
+Formats general data into Pandas DataFrames.
+
 #### JV
 > Module name: `iv`
 
@@ -114,10 +121,10 @@ Formats IV data into Pandas DataFrames.
 
 Formats energy band data into Pandas DataFrames.
 
-#### General
-> Module name: `gnr`
+#### Generation and Recombination
+> Module name: `gen`
 
-Formats general data into Pandas DataFrames.
+Formats generation and recombination band data into Pandas DataFrames.
 
 ---
 
