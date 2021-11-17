@@ -3,8 +3,6 @@
 
 # # Photoluminescence Data Prep
 
-# In[1]:
-
 
 import pandas as pd
 import numpy as np
@@ -21,7 +19,7 @@ from .. import standard_functions as std
 def wl_to_en( l ):
     """
     Converts a wavelength, given in nm, to an energy in eV.
-    
+
     :param l: The wavelength to convert, in nm.
     :returns: The corresponding energy in eV.
     """
@@ -32,7 +30,7 @@ def wl_to_en( l ):
 def en_to_wl( e ):
     """
     Converts an energy, given in eV, to a wavelength.
-    
+
     :param e: The energy to convert, in eV.
     :returns: The corresponding wavelength in nm.
     """
@@ -44,7 +42,7 @@ def en_to_wl( e ):
 def normalize( df, baseline = 0.1 ):
     """
     Normalize all spectrum.
-    
+
     :param df: The Pandas DataFrame to normalize.
     :param baseline: Baseline correction threshold or False for no correction.
         [Default: 0.1]
@@ -62,39 +60,37 @@ def normalize( df, baseline = 0.1 ):
 def index_to_energy( df, scale = False ):
     """
     Converts a Pandas Index with wavelength index to energy index.
-    
+
     :param df: The Pandas DataFrame, with wavelength indices in nanometers, to convert.
     :param scale: Scale counts to maintain bin volume. [Default: False]
     :returns: A new DataFrame indexed by energy in eV.
     """
     edf = df.copy()
-    
+
     en = wl_to_en( df.index.values )
     edf.index = pd.Index( en )
-    
+
     if scale:
         ratio = np.diff( df.index ) / np.diff( edf.index ) # find ratio of widths
         ratio /= ratio.max()
         ratio = np.insert( ratio, 0, ratio[ 0 ] )
-        
+
         edf = edf.multiply( ratio, axis = 0 ) # multiply counts by normalized ratio
-    
-    return edf    
 
+    return edf
 
-# In[ ]:
 
 
 def correct_spectra( df, correction ):
     """
     Corrects a spectral DataFrame.
-    
+
     :param df: DataFrame of spectra.
     :param correction: Series of correction with same index type as df.
     :returns: Corrected DataFrame.
     """
     _, corr = std.common_reindex( [ df, correction ] )  # match index
     cdf = df.mul( corr, axis = 0 )
-    
+
     return cdf
 

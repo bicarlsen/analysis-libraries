@@ -92,7 +92,6 @@ def import_batch_eb_data( file, separator = '\t', encoding = 'iso-8859-1' ):
     df = [ mesh ]
     sections = metric_sections( d_content, names = h_names )
     for param, data in sections.items():
-        print( 'sec', param )
         tdf = data[ 2 ]
         tdf = std.insert_index_levels(
             tdf, data[ 0 ], names = 'metrics', key_level = tdf.columns.shape[ 0 ]
@@ -178,7 +177,7 @@ def headers_to_index( headers, names = None, separator = '\t' ):
         index = pd.MultiIndex.from_tuples( values, names = o_names )
         
     if names is not None:
-        rename = [ names[ h_name ] for h_name in index.names ]
+        rename = tuple( names[ h_name ] for h_name in index.names )
         index = index.rename( rename )
     
     return index

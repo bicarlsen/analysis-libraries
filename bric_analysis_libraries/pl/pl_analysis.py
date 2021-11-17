@@ -5,6 +5,8 @@
 
 import logging
 from numbers import Number
+from collections.abc import Iterable
+
 
 import pandas as pd
 import numpy as np
@@ -32,6 +34,7 @@ def convert_beta_temperature( p ):
         Temperature in Kelvin if beta was given.
     """
     return 1/( phys.physical_constants[ 'Boltzmann constant in eV/K' ][ 0 ]* p )
+
 
 # ## Distributions
 
@@ -231,6 +234,19 @@ def peak_position( df, start = None, end = None ):
     return peak
 
 
+def center_of_mass( df ):
+    """
+    Retuns a Pandas Series of the center of mass for the spectra.
+
+    :param df: DataFrame to calaculate the center of mass on.
+    :returns: Pandas Series of center of masses.
+    """
+    idx = df.index
+    weights = df/ df.sum()
+    com = weights.multiply( idx, axis = 0 ).sum()
+    return com
+
+
 def integrated_intensity( df, start = None, end = None ):
     """
     Calculates the integrated intensity (area under the curve) of a spectrum.
@@ -291,12 +307,13 @@ def peak_analysis( df, groups = None, start = None, end = None ):
     ], axis = 1 )
 
 
-def extract_tempertaure(
+def extract_temperature(
     df,
+    value_threshold = 0,
     grad_threshold = 10,
     curve_threshold = 1e5,
     side = 'high',
-    mask_window = 75
+    mask_window = 75,
 ):
     """
     Finds the temperature coefficient from a PL curve.
@@ -305,6 +322,8 @@ def extract_tempertaure(
     and curvature less that the given threshold.
 
     :param df: DataFrame of PL specra indexed by energy.
+    :param value_threshold: Minimum value relative to max to consider.
+        [Default: 0]
     :param grad_threshold: Minimum gradient threshold. [Default: 40]
     :param curve_threshold: Maximum curvature threshold. [Default: 1000]
     :param side: 'low' for low energy, 'high' for high energy. [Default: 'high']
@@ -317,8 +336,7 @@ def extract_tempertaure(
     df = df.copy()
 
     # calculate needed data
-    df /= df.max()
-    ldf = df.apply( np.log ).dropna( how = 'all' )
+    ldf = df.apply( np.log ).replace( [ -np.inf, np.inf ], np.nan ).dropna( how = 'all' )
     gdf = ldf.apply( std.df_grad )
     cdf = gdf.apply( std.df_grad )
 
@@ -336,6 +354,12 @@ def extract_tempertaure(
             logger.info( f'No data for { name } due to side mask.' )
             continue
         
+        v_mask = ( 
+            ldf[ name ][ mask ].apply( np.exp ) > value_threshold
+            if value_threshold > 0 else
+            ldf[ name ][ mask ] > -np.inf
+        )
+
         g_mask = (
             gdf[ name ][ mask ] > grad_threshold
             if side == 'low' else
@@ -347,11 +371,14 @@ def extract_tempertaure(
             ( cdf[ name ][ mask ] > -curve_threshold )
         )
 
+        v_mask = std.smooth_mask( v_mask, window = mask_window )
         g_mask = std.smooth_mask( g_mask, window = mask_window )
         c_mask = std.smooth_mask( c_mask, window = mask_window )
 
         tdf = data[ mask ]
-        tdf = tdf[ g_mask & c_mask ]
+        tdf = tdf[ v_mask & g_mask & c_mask ]
+        tdf = tdf.dropna()
+        
         if tdf.shape[ 0 ] == 0:
             # no data
             fits[ name ] = None
@@ -374,6 +401,140 @@ def extract_tempertaure(
         fits[ name ] = ( temp, fit )
 
     return fits
+
+
+def differential_temperature( df, window = 11, normalize = True ):
+    """
+    Extracts the differential temperature from a DataFrame.
+
+    :param df: Pandas DataFrame of PL spectra.
+    :param window: Window size for linear fitting.
+        [Default: 11]
+    :returns: Pandas DataFrame of differential temperatures.
+    :raises ValueError: If window is smaller than 1.
+    :raises ValueError: If window is not odd valued.
+    """
+    def _temp_fit( row, data ):
+        ind_loc = data.index.get_loc( row.name )
+        tdf = data.iloc[ ind_loc - half_window : ind_loc + half_window + 1 ]
+        fit = linregress( tdf.index, tdf.values )
+        temp = -convert_beta_temperature( fit.slope )
+        return ( temp, fit )
+    
+    if window < 2:
+        raise ValueError( 'Window must be larger than 1.' )
+
+    if window% 2 == 0:
+        raise ValueError( 'Window must be odd.' )
+
+    half_window = int( ( window - 1 )/ 2 )
+    ldf = df.apply( np.log )
+    fdf = []
+    for name, data in ldf.items():
+        tdf = data.dropna().to_frame()
+        tdf = tdf.iloc[ half_window : -half_window ]
+        tdf = tdf.apply(
+            _temp_fit,
+            axis = 1,
+            args = ( data, ),
+            result_type = 'expand'
+        )
+        
+        tdf = tdf.rename( { 0: 'temperature', 1: 'fit' }, axis = 1 )
+        headers = [
+            ( *name, val ) if isinstance( name, Iterable ) else ( name, val )
+            for val in  tdf.columns.values
+        ]
+        
+        tdf.columns = pd.MultiIndex.from_tuples(
+            headers,
+            names = ( *df.columns.names, 'fits' )
+        )
+        
+        fdf.append( tdf )
+    
+    if len( fdf ) > 1:
+        fdf = pd.concat( fdf, axis = 1 )
+    
+    else:
+        fdf = fdf[ 0 ]
+
+    return fdf
+
+
+def differential_temperature_stats(
+    df,
+    grad_threshold = 10,
+    curve_threshold = 1e5,
+    side = 'high',
+    mask_window = 75,
+):
+    """
+    Returns statistics on differential temepratures.
+    Used in conjunction with #differential_temperature
+
+    :param df: DataFrame of differential temperatures indexed by energy.
+    :param grad_threshold: Maximum gradient threshold. [Default: 40]
+    :param curve_threshold: Maximum curvature threshold. [Default: 1000]
+    :param side: 'low' for low energy, 'high' for high energy. [Default: 'high']
+    :param mask_window: Smoothing window for data mask. [Default: 75]
+    :returns: Dictionary of tuples of ( temperature, linear fit ).
+        If no valid data for a particular dataset vlaue is None.
+
+    """
+    logger = logging.getLogger( __name__ )
+    df = df.copy()
+
+    # calculate needed data
+    gdf = df.apply( std.df_grad )
+    cdf = gdf.apply( std.df_grad )
+
+    stats = {}
+    for name, data in df.items():
+        g_data = gdf[ name ]
+        
+        g_mask = g_data.abs() < grad_threshold
+        g_mask = std.smooth_mask( g_mask, window = mask_window )
+
+        c_mask = cdf[ name ].abs() < curve_threshold 
+        c_mask = std.smooth_mask( c_mask, window = mask_window )
+
+        mask  = (
+            g_data.index < g_data.idxmin()
+            if side == 'low' else
+            g_data.index > g_data.idxmax()
+        )
+        
+        tdf = data[ mask & g_mask & c_mask ]
+        tdf = tdf.dropna()
+
+        if tdf.shape[ 0 ] == 0:
+            # no data
+            mean = None
+            stddev = None
+            floor = None
+
+        else:
+            mean = tdf.mean()
+            stddev = tdf.std()
+            floor = (
+                tdf.max()
+                if side == 'low' else
+                tdf.min()
+            )        
+
+        if not isinstance( name, Iterable ):
+            # normalize name to tuple if required
+            name = ( name, )
+
+        stats[ ( *name, 'mean' ) ] = mean
+        stats[ ( *name, 'std' ) ] = stddev
+        stats[ ( *name, 'min' ) ] = floor
+
+    stats = pd.Series( stats )
+    stats.index = stats.index.rename( ( *df.columns.names, 'metrics' ) )
+    return stats
+
 
 
 # ## Spectral functions
@@ -432,9 +593,9 @@ def intensity_gaussian_population( Eg0, sigma, t = 300 ):
 
     Approximation:
     sigma^2 ( delta - shift ) Exp( -delta^2/( 2 sigma^2 ) ) +
-    Sqrt( pi/2 ) sigma ( ( delta - shift )^2 + sigma^2 )
-
-        Exp( -beta( delta - shift/ 2 ) ) Erfc( -( delta - shift )/ Sqrt( 2 sigma^2 ) )
+    Sqrt( pi/2 ) sigma ( ( delta - shift )^2 + sigma^2 ) *
+        Exp( -beta( delta - shift/ 2 ) ) *
+        Erfc( -( delta - shift )/ Sqrt( 2 sigma^2 ) )
 
     e: Wavelength energy
     Eg0: Center bandgap energy.

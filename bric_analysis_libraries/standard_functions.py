@@ -868,10 +868,21 @@ def df_fit_function( fcn, param_names = None, guess = None, modify = None, **kwa
 
         fits = pd.DataFrame( fits )
         fits.columns = fits.columns.rename( [ 'parameter', 'metric' ] )
-        fits.index = pd.MultiIndex.from_tuples(
-            fits.index.values,
-            names = mdf.columns.names
-        )
+
+        if isinstance( df.index, pd.Index ):
+            fits.index = pd.Index(
+                fits.index.values,
+                name = mdf.index.name
+            )
+
+        elif isinstance( df.index, pd.MultiIndex ):
+            fits.index = pd.MultiIndex.from_tuples(
+                fits.index.values,
+                names = mdf.columns.names
+            )
+
+        else:
+            raise TypeError( 'Unknown type of index encountered.')
 
         return fits.sort_index().sort_index( axis = 1 )
 

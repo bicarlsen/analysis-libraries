@@ -258,3 +258,44 @@ def import_cell_parameters( file, encoding = 'iso-8859-1', remove_header_units =
         
     df = pd.Series( data = data, index = index )
     return df
+
+def import_batch_characterization_parameters( file, encoding = 'iso-8859-1', remove_header_units = True ):
+    """
+    Import characterization parameters of a batch experiment.
+
+    :param file: File of IV data.
+    :param encoding: file encoding. [Default: 'iso-8859-1']
+    :param remove_header_units: Remove units from parameter names.
+        [Default: True]
+    :returns: Pandas DataFrame of characterization parameters indexed by batch parameters.
+    """
+    with open( file ) as f:
+        h_data, v_data = common.split_content_header_data( f.read() )
+
+    # create data frame
+    rows = v_data.strip().split( '\n' )     
+    df = [ list( map( lambda v: float( v.strip() ), row.split( '\t' ) ) ) for row in rows[ 1: ] ]
+    df = pd.DataFrame( df, columns = rows[ 0 ].split( '\t' ) )
+    df = df.drop( 'i', axis = 1 )
+
+    # set index from batch parameters
+    bp_pattern = 'bp (\d+)'
+    h_names = common.batch_settings( h_data )
+    ind = []
+    for name, data in df.items():
+        match = re.match( bp_pattern, name )
+        if match is None:
+            continue
+            
+        bp_name = h_names[ match.group( 1 ) ]
+        df = df.rename( { name: bp_name }, axis = 1 )
+        
+        ind.append( bp_name )
+
+    df = df.set_index( ind )
+    
+    if remove_header_units:
+        df = df.rename( { name: re.sub( '\(.*\)', '', name ) for name in df.columns }, axis = 1 )
+
+    df = df.rename( { name: name.strip() for name in df.columns }, axis = 1 )
+    return df
