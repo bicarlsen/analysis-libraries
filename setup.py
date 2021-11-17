@@ -5,7 +5,7 @@ with open( 'README.md', 'r' ) as f:
 
 setuptools.setup(
     name='bric-analysis-libraries',
-    version = '0.0.9',
+    version = '0.0.10',
     author='Brian Carlsen',
     author_email = 'carlsen.bri@gmail.com',
     description = 'An assortment of analysis libraries.',
