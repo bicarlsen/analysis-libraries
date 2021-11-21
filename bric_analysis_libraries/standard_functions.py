@@ -103,6 +103,7 @@ def metadata_from_file_name(
     group = 0,
     full_path = False,
     abs_path = False,
+    extension = True,
     flags = 0
 ):
     """
@@ -130,6 +131,11 @@ def metadata_from_file_name(
     :param group: The match index to return. If 'all' returns all matches. [Default: 0]
     :param full_path: Use the full file path instead of only the base name. [Default: False]
     :param abs_path: Use the absolute file path instead of only the base name. [Default: False]
+    :param extension: Defines hwo the extension should be processed.
+        If None or False, no extension processing occurs.
+        If True, the last portion of the file name, separated by '.', is assumed to be the extension.
+        If a string, removes the extension if it occurs at the end of the file name. Should include '.'.
+        [Default: True]
     :param flags: Regular expression flags to use when matching. [Default: 0]
 
     :returns: The value of the found value, returned as int or float if numeric, string otherwise
@@ -143,7 +149,24 @@ def metadata_from_file_name(
     elif not full_path:
         file = os.path.basename( file )
 
-    file = os.path.splitext( file )[ 0 ]
+    if extension:
+        if extension is True:
+            # extension assumed to be last part of file name
+            file = os.path.splitext( file )[ 0 ]
+
+        else:
+            # extension is given explicitly
+            try:
+                index = file.rindex( extension )
+
+            except ValueError as err:
+                raise ValueError( 'Extension not found.' )
+
+            if index != len( file ) - len( extension ):
+                # extension does not occur at end of file name
+                raise ValueError( 'Extension not found at end of file name.' )
+
+            file = file[ :index ]
 
     # modify search for delimeters and numeric types
     # if numeric, search for preceeding 'm' and trailing exponential
