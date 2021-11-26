@@ -257,7 +257,8 @@ def get_power( df ):
     """
     Creates a Pandas DataFrame containing the power of the JV curves.
 
-    :param df: The DataFrame containing the JV curves.
+    :param df: DataFrame containing the JV curves.
+        Values are currents, index is voltage.
     :returns: A Pandas DataFrame containg the power at each voltage index value.
     """
     pwr = df.mul( df.index, axis = 0 )
@@ -268,7 +269,8 @@ def get_mpp( df, generator = False ):
     """
     Gets the maximum power point
 
-    :param df: A Pandas DataFrame containing JV scans to evaluate
+    :param df: Pandas DataFrame containing JV scans.
+        Values are current, index is voltage.
     :param generator: Is the JV scan of a consumer or generator.
         [Default: False]
     :returns: A Pandas DataFrame with Vmpp with Jmpp and Pmpp
@@ -343,8 +345,14 @@ def get_voc( df, fit_window = 20 ):
 
         if ( dpos.shape[ 0 ] and dneg.shape[ 0 ] ):
             # data on both sides of zero
+            left, right = ( 
+                ( dpos, dneg )
+                if ( dpos.index.values.mean() < dneg.index.values.mean() ) else
+                ( dneg, dpos )
+            )
+
             half_window = int( fit_window/ 2 )
-            tdf = pd.concat( [ dneg.iloc[ -half_window: ], dpos.iloc[ :half_window ] ] )
+            tdf = pd.concat( [ left.iloc[ -half_window: ], right.iloc[ :half_window ] ] )
 
         else:
             # one sided data
@@ -373,8 +381,8 @@ def get_metrics( df, generator = False ):
     Metrics include maximum power point (vmpp, jmpp, pmpp), open circuit voltage,
     short circuit current, and fill factor.
 
-    :params df: The DataFrame containing the JV curves.
-    :param generator: Is the JV scan of a consumer or generator.
+    :params df: DataFrame containing the JV curves, indexed by voltage.
+    :param generator: Is the JV scan of a consumer (quadrants 2 and 4) or generator (quadrants 1 and 3).
         [Default: False]
     :returns: A Pandas DataFrame containing information about the curves.
     """
@@ -385,12 +393,11 @@ def get_metrics( df, generator = False ):
     return metrics
 
 
-
 def get_pces( df, suns = 1 ):
     """
     Calculate the power efficiency conversion
 
-    :param df: A Pandas DataFrame containing JV metrics, with pmpp column
+    :param df: A Pandas DataFrame containing JV metrics, with pmpp column.
     :param suns: The intensity of the illumination [Default: 1]
     :returns: A DataFrame with pce calculated
     """

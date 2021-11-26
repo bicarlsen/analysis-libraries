@@ -1467,6 +1467,9 @@ def integrate_df( df ):
     :param df: Pandas DataFrame to integrate.
     :returns: Pandas Series of integrals of the data, accounting for the index values.
     """
+    if isinstance( df, pd.Series ):
+        df = df.to_frame()
+
     x = df.index
     data = {
         name: trapezoid( vals, x )
