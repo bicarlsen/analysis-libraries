@@ -36,7 +36,12 @@ def section_positions( section ):
     :returns: Dictionary of line numbers for section components.
     """
     parameters_pattern = '**Batch parameters**'
-    params_start = section.index( parameters_pattern ) + 1
+    try:
+        params_start = section.index( parameters_pattern ) + 1
+    
+    except ValueError as err:
+        raise RuntimeError( 'Could not find batch parameters.' )
+        
     params_end = section.index( '', params_start )
     
     header = params_end + 1 
