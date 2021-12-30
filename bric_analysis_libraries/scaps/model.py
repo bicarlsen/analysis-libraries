@@ -1,5 +1,13 @@
 # scaps/model
 
+from __future__ import annotations  # required for type hints
+
+# check python version
+# required for dataclasses
+import sys
+if sys.version_info < ( 3, 7 ):
+	raise RuntimeError( 'bric_analysis_libraries.scaps.model requires Python version 3.7 or higher.' )
+
 import re
 from enum import Enum
 from collections import namedtuple
@@ -232,7 +240,7 @@ def content_to_param_dict(
 
 			# assign value
 			if ( kind is float ) or ( d_kind is float ):
-				params[ p_key ] = ( val, unit )
+				params[ p_key ] = ValueParameter( val, unit )
 
 			else:
 				params[ p_key ] = val
@@ -458,7 +466,7 @@ class Layer():
 	valence_dos: float
 	
 	e_mobility: float
-	h_mobiltiy: float
+	h_mobility: float
 	
 	e_thermal_velocity: float
 	h_thermal_velocity: float
@@ -477,8 +485,35 @@ class Layer():
 	defects: typing.List[ BulkDefect ] = field( default_factory = list )
 
 
+	@property
 	def work_function( self ) -> float:
-		return ( self.electron_affinity + self.band_gap )
+		if self.electron_affinity.unit != self.band_gap.unit:
+			raise ValueError( 'Electron Affinity and Band Gap have different units. Can not compute.' )
+
+		ea = self.electron_affinity.value
+		bg = self.band_gap.value
+
+		ea_list = isinstance( ea, list )
+		bg_list = isinstance( bg, list )
+		if ea_list and bg_list:
+			if len( ea ) != len( bg ):
+				raise ValueError( 'Electron Affinity and Band Gap have different lengths. Can not compute.' )
+
+			wf = [ ( ea[ i ] + bg[ i ] ) for i in range( len ( ea ) ) ]
+
+		elif ea_list:
+			# ea is list, bg is number
+			wf = [ ( ea_val + bg ) for ea_val in ea ]
+
+		elif bg_list:
+			# bg is list, ea is number
+			wf = [ ( bg_val + ea ) for bg_val in bg ]
+
+		else:
+			# bg and ea are single values
+			wf = bg + ea
+
+		return ValueParameter( value = wf, unit = self.electron_affinity.unit )
 
 
 	@staticmethod
@@ -503,7 +538,7 @@ class Layer():
 			'Nc': ( 'conduction_dos', list, float ),
 			'Nv': ( 'valence_dos', list, float ),
 			'mu_n': ( 'e_mobility', list, float ),
-			'mu_p': ( 'h_mobiltiy', list, float ),
+			'mu_p': ( 'h_mobility', list, float ),
 			'K_rad': ( 'radiative_recombination', list, float ),
 			'c_n_auger': ( 'e_auger_capture', list, float ),
 			'c_p_auger': ( 'h_auger_capture', list, float ),
@@ -635,6 +670,19 @@ class Model():
 		"""
 		return self.sections_of_type( Interface )
 
+	
+	@property
+	def total_thickness( self ):
+		"""
+		:returns: Total thickness of all layers in the model.
+		"""
+		units = [ layer.thickness.unit for layer in self.layers ]
+		if any( [ unit != units[ 0 ] for unit in units ] ):
+			raise ValueError( 'Layer thicknesses have different units. Can not compute.' )
+
+		t = sum( [ layer.thickness.value for layer in self.layers ] )
+		return ValueParameter( value = t, unit = units[ 0 ] )
+
 
 	def sections_of_type( self, kind ):
 		"""
@@ -648,6 +696,31 @@ class Model():
 
 		return sections
 
+
+	def section( self, name ):
+		"""
+		:param name: Name of the section to return.
+		:return: Section of the stack with the matching name.
+		"""
+		for sec in self.stack:
+			if hasattr( sec, 'name' ):
+				if sec.name == name:
+					return sec
+
+
+	def interface( self, l1, l2 ):
+		"""
+		:param l1: Name of layer 1.
+		:param l2: Name of layer 2.
+		:returns: Interface between the two layers.
+		"""
+		interface = self.section( f'{l1} / {l2}' )
+		if interface is None:
+			# swap layer order
+			interface = self.section( f'{l2} / {l1}' )
+
+		return interface
+		
 
 	@staticmethod
 	def from_file( file ) -> Model:
@@ -674,4 +747,11 @@ class Model():
 
 				stack.append( section_model )
 
-		return Model( stack )
+		model = Model( stack )
+
+		# determine if front is start or end
+		stack_arch = [ sec[ 0 ] for sec in sections ]
+		if ( 'back contact' in stack_arch ) and ( 'front contact' in stack_arch ):
+			model.front_start =  ( stack_arch.index( 'front contact' ) < stack_arch.index( 'back contact' ) )
+		
+		return model

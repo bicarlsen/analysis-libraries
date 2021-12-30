@@ -25,6 +25,24 @@ def sample_from_file_name( file ):
     return std.metadata_from_file_name( name_search, file, delimeter = '_' )
 
 
+def time_from_file( metadata ):
+        """
+        Get integration time metadata from file.
+
+        :param metadata: A list of metadata from the file.
+        :returns: The integration time.
+        """
+        for prop, value in metadata.items():
+            if re.match( 'Integration Time', prop ):
+                # found integration time
+                return float( value )
+
+        if 'time' not in header_names:
+            # did not find integration time
+            raise RuntimeError( 'Could not find integration time in file {}'.format( file ) )
+
+
+
 def get_standard_metadata_value( file, metadata ):
     """
     Gets metadata values from a file path
@@ -124,22 +142,6 @@ def import_datum( file, time = False, cps = False, metadata = None, reindex = Tr
     :param reindex: Use wavelength as index [Default: True]
     :returns: A Pandas DataFrame with MultiIndexed columns
     """
-    def get_time_from_file( metadata ):
-        """
-        Get integration time metadata from file.
-
-        :param metadata: A list of metadata from the file.
-        :returns: The integration time.
-        """
-        for prop, value in metadata.items():
-            if re.match( 'Integration Time', prop ):
-                # found integration time
-                return float( value )
-
-        if 'time' not in header_names:
-            # did not find integration time
-            raise RuntimeError( 'Could not find integration time in file {}'.format( file ) )
-
 
     data_names = [ 'wavelength', 'counts' ]
 
@@ -161,7 +163,7 @@ def import_datum( file, time = False, cps = False, metadata = None, reindex = Tr
         file_metadata = { d[ 0 ].strip(): d[ 1 ].strip() for d in file_metadata if len( d ) == 2 }
 
     if cps or time:
-        int_time = get_time_from_file( file_metadata )
+        int_time = time_from_file( file_metadata )
 
     # no metadata, import file
     if ( metadata is None ) and ( time is False ):

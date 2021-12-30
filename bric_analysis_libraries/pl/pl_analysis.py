@@ -1,12 +1,11 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # Photoluminescence Analysis
+# Photoluminescence Analysis
 
 import logging
 from numbers import Number
 from collections.abc import Iterable
-
 
 import pandas as pd
 import numpy as np
@@ -22,7 +21,8 @@ from   scipy.stats     import linregress
 
 from .. import standard_functions as std
 
-# ## Helper functions
+
+# Helper functions
 
 def convert_beta_temperature( p ):
     """
