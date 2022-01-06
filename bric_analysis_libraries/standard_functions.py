@@ -138,7 +138,8 @@ def metadata_from_file_name(
         [Default: True]
     :param flags: Regular expression flags to use when matching. [Default: 0]
 
-    :returns: The value of the found value, returned as int or float if numeric, string otherwise
+    :returns: The value of the found value,
+        returned as int or float if numeric, string otherwise.
     :raises RuntimeError: If no match is found
     """
 
@@ -985,12 +986,16 @@ def df_areal_difference( ref, df ):
 # ## Mask functions
 
 
-def smooth_mask( mask, window = 10 ):
+def smooth_mask( mask, window = 10, fillna = 'backfill' ):
     """
     Smooths a mask of True/False values.
 
     :param mask: Mask to smooth.
     :param window: Smoothing window. [Default: 10]
+    :param fillna: Method to fill na values from smoothing,
+        or None to leave as na.
+        [See pandas.Series#fillna]
+        [Default: 'backfill']
     :returns: Smoothed mask.
     """
     # convert False/True to 0/1
@@ -1008,7 +1013,8 @@ def smooth_mask( mask, window = 10 ):
 
     # smooth values and convert back to False/True
     df = df.rolling( window = window ).mean()
-    df = df.fillna( 0 )
+    if fillna is not None:    
+        df = df.fillna( method = fillna )
     df = df.apply( round )
     df = df.apply( bool )
 
@@ -1634,6 +1640,7 @@ def temperature_plot_rainbow(
     colorbar = True,
     level = 0,
     ax = None,
+    color_by_cycle = False,   
     cmap = 'jet',
     **kwargs 
 ):
@@ -1644,6 +1651,8 @@ def temperature_plot_rainbow(
     :param colorbar: Whether to include the color bar legend. [Default: True]
     :param level: Index or name of the level used for coloring. [Default: 0]
     :param ax: Axis to plot on. If None, creates one. [Default: None]
+    :param color_by_order: Color traces by order of values, rather than actual value.
+        [Default: False]
     :param cmap: Colormap to use. [Defualt: 'jet']
     :param **kwargs: Arguments passed to pandas.DataFrame#plot
     """
@@ -1654,29 +1663,48 @@ def temperature_plot_rainbow(
     else:
         fig = ax.get_figure()
 
-    NUM_COLORS = (
-        df.shape[ 1 ]
+    temp_vals = (
+        df.columns.get_level_values( level ).values
         if is_df else
-        df.shape[ 0 ]
+        df.index.get_level_values( level ).values
     )
+
+    val_min = temp_vals.min()
+    val_max = temp_vals.max()
     
     cm = plt.get_cmap( cmap )
-    ax.set_prop_cycle( color = [ cm( float( i / NUM_COLORS ) ) for i in range( NUM_COLORS ) ] )
 
-    df.plot( ax = ax, **kwargs )
+    if color_by_order:
+        # color by vlaue index
+        sort_vals = np.unique( temp_vals )
+        sort_vals.sort()
+
+        indices = [
+            np.argwhere( sort_vals == temp_val )[ 0 ][ 0 ]
+            for temp_val in temp_vals
+        ]
+
+        num_vals = temp_vals.shape[ 0 ]
+        colors = [ cm( float( ind/ num_vals ) ) for ind in indices ]
+
+    else:
+        # color by value
+        colors = [
+            cm( ( temp_val - val_min )/( val_max - val_min ) )  # normalize values sbetween 0 and 1
+            for temp_val in temp_vals
+        ]
+
+    df.plot( color = colors, ax = ax, **kwargs )
 
     if colorbar:
-        temp_vals = (
-            df.columns.get_level_values( level ).values
-            if is_df else
-            df.index.get_level_values( level ).values
-        )
-
         cax = fig.add_axes( [ 0.92, 0.15, 0.05, 0.7 ] )
         cbar = mpl.colorbar.ColorbarBase(
             ax = cax,
             cmap = cm,
-            norm = mpl.colors.Normalize( vmin = temp_vals.min(), vmax = temp_vals.max() ),
+            norm = mpl.colors.Normalize(
+                vmin = val_min,
+                vmax = val_max
+            ),
             orientation = 'vertical'
         )
 

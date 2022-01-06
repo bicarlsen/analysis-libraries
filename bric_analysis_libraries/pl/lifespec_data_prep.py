@@ -61,8 +61,20 @@ def center_wavelength_from_file_name( file ):
     return center
 
 
+def bandwidth_from_file_name( file ):
+    """
+    Extract bandwidth from file name.
+
+    :parma file: File name.
+    :returns: Bandwidth.
+    """ 
+    bandwidth_search = 'bandwidth<>nm'
+    bandwidth = std.metadata_from_file_name( bandwidth_search, file, is_numeric = True )
+    return bandwidth
+
+
 # create standard metadata parser
-get_metadata_values = metadata.metadata_parser( {
+metadata_dataframe_index = metadata.metadata_dataframe_index_parser( {
     # key is name of metadata, value is coorespoinding function
     ( module.replace( '_from_file_name', '' ) ): getattr( sys.modules[ __name__ ], module )
     for module in dir( sys.modules[ __name__ ] )
@@ -109,16 +121,7 @@ def import_datum( path, metadata = None ):
     )
 
     if metadata is not None:
-        vals = get_metadata_values( path, metadata )
-        if len( metadata ) == 1:
-            cols = pd.Index( vals, name = metadata[ 0 ] )
-
-        else:
-            cols = pd.MultiIndex.from_tuples(
-                [ vals ],
-                names = metadata
-            )
-
+        cols = metadata_dataframe_index( path, metadata )
         df.columns = cols 
 
     return df
@@ -159,5 +162,5 @@ def import_data(
     if interpolate is not None:
         df = std.common_reindex( df, how = interpolate, fillna = fillna )
 
-    df = pd.concat( df, axis = 1 )
+    df = pd.concat( df, axis = 1 ).sort_index( axis = 1 )
     return df

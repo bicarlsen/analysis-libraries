@@ -3,6 +3,8 @@
 import sys
 from functools import partial
 
+import pandas as pd
+
 import bric_analysis_libraries.standard_functions as std
 
 
@@ -43,11 +45,15 @@ def get_metadata_values( md_map, file, metadata ):
     :param file: The file path to search.
     :param metadata: Metadata from the file name is turned into MultiIndex columns.
         + If list, use standard keywords to include in index [ 'sample' ]
-        + If Dictionary, keys indicate level name, value is pattern to match.
-            or another dictionary with 'search' key being the pattern to match, and additional
-            entries matching arguments passed to standard_functions#metadata_from_filename.
-            + Reseserved key 'standard' can be provided with a list value to get standard metadata.
-    :returns: A list of metadata values.
+        + If Dictionary, keys indicate level name.
+            Value can be a regex pattern to match or another dictionary.
+            If a dictionary, key 'search' is a pattern to match
+            passed to standard_functions#metadata_from_filename, and key-value pairs
+            are keyword arguments of standard_functions#metadata_from_filename.
+            + Reseserved key 'standard' can be provided with a list
+                of standard metadata names.
+            [See also standard_functions#metadata_from_filename]
+    :returns: Tuple of metadata values.
     """
     if isinstance( metadata, list ):
         # use standard metadata
@@ -88,15 +94,88 @@ def get_metadata_values( md_map, file, metadata ):
         # flatten standard keys
         if 'standard' in header_names:
             index = header_names.index( 'standard' )
-            vals = vals[ :index ] + vals[ index ] + vals[ index + 1: ]
+            vals = vals[ :index ] + list( vals[ index ] ) + vals[ index + 1: ]
 
-        return vals
+        return tuple( vals )
+
+
+def metadata_to_names( metadata ):
+    """
+    :param metadata: Dictionary of metadata as passed to #get_metadata_values.
+    :returns: Tuple of names corresponding to the metadata.
+    [See also: #get_metadata_values]
+    """
+    names = []
+    for name in metadata:
+        if name == 'standard':
+            # flatten standard names
+            names = [ *names, *metadata[ 'standard' ] ]
+
+        else:
+            names.append( name )
+
+    return tuple( names )
+
+
+def get_metadata( md_map, file, metadata ):
+    """
+    :param md_map: Dictionary of keys to callables to extract metadata.
+        Callables should accept a single parameter which is the file name.
+    :param file: The file path to search.
+    :param metadata: Dictionary of metadata as passed to #get_metadata_values.
+    :returns: Dictionary of name-value pairs representing the extracted metadata.
+    [See also: #get_metadata_values]
+    """
+    values = get_metadata_values( md_map, file, metadata )
+    names = metadata_to_names( metadata )
+    if len( values ) != len( names ):
+        raise ValueError( 'Values and names have different lengths.' )
+
+    return {
+        names[ index ]: values[ index ] 
+        for index in range( len( values ) )
+    }
 
 
 def metadata_parser( md_map ):
     """
     :param md_map: Dictionary of keys to callables to extract metadata.
         The callables should accept a single parameter which is the file name.
-    :returns: Function that accepts a file name and metadata map, and returns the extracted metadata.
+    :returns: Partial of #get_metadata with `md_map` specified.
+            [See also #get_metadata]
     """
-    return partial( get_metadata_values, md_map )
+    return partial( get_metadata, md_map )
+
+
+def metadata_to_dataframe_index( md_map, file, metadata, force_multi = False ):
+    """
+    :param md_map: Dictionary of keys to callables to extract metadata.
+        Callables should accept a single parameter which is the file name.
+    :param file: The file path to search.
+    :param metadata: Dictionary of metadata as passed to #get_metadata_values.
+    :param force_multi: Return pandas.MultiIndex even if only 
+        one metadata value is present.
+        [Default: False]
+    :returns: Pandas Index or MultiIndex representing the extracted metadata.
+        Returns pandas.Index if only one value is present, otherwise returns
+        pandas.MultiIndex.
+    [See also: #get_metadata_values]
+    """
+    md = get_metadata( md_map, file, metadata )
+    if len( metadata ) == 1:
+        return pd.Index( md.values(), name = md.keys() )
+
+    else:
+        return pd.MultiIndex.from_tuples(
+            [ md.values() ],
+            name = md.keys()
+        )
+
+def metadata_dataframe_index_parser( md_map ):
+    """
+    :param md_map: Dictionary of keys to callables to extract metadata.
+        The callables should accept a single parameter which is the file name.
+    :returns: Partial of #metadata_to_dataframe_index with `md_map` specified.
+            [See also #metadata_to_dataframe_index]
+    """
+    return partial( metadata_to_dataframe_index, md_map )
