@@ -334,44 +334,8 @@ def get_voc( df, fit_window = 20 ):
     :param fit_window: Window size to extrapolate if needed. [Default: 20]
     :returns: A Pandas Series of open circuit voltages.
     """
-    df = df.sort_index()
-
-    voc = pd.Series( index = df.columns, dtype = np.float64 )
-    pos = df[ df > 0 ]
-    neg = df[ df < 0 ]
-    for name, data in df.items():
-        dpos = pos[ name ].dropna()
-        dneg = neg[ name ].dropna()
-
-        if ( dpos.shape[ 0 ] and dneg.shape[ 0 ] ):
-            # data on both sides of zero
-            left, right = ( 
-                ( dpos, dneg )
-                if ( dpos.index.values.mean() < dneg.index.values.mean() ) else
-                ( dneg, dpos )
-            )
-
-            half_window = int( fit_window/ 2 )
-            tdf = pd.concat( [ left.iloc[ -half_window: ], right.iloc[ :half_window ] ] )
-
-        else:
-            # one sided data
-            tdf = dneg.iloc[ -fit_window: ] if dneg.shape[ 0 ] else dpos.iloc[ :fit_window ]
-
-        if tdf.shape[ 0 ] < 3:
-            voc[ name ] = np.nan
-            continue
-
-        tdf = tdf.squeeze()
-        try:
-            fit = linregress( tdf.index, tdf.values )
-        
-        except:
-            voc[ name ] = np.nan
-
-        else:            
-            voc[ name ] = -fit.intercept/ fit.slope
-
+    roots = std.df_find_index_of_value( df, 0, fit_window = fit_window, deg = 1 )
+    voc = roots[ 0 ]
     return voc.rename( 'voc' )
 
 

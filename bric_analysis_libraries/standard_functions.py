@@ -17,6 +17,7 @@ import warnings
 import functools as ftools
 
 import numpy as np
+from numpy.polynomial import Polynomial
 import pandas as pd
 
 import scipy as sp
@@ -25,7 +26,7 @@ from scipy.optimize import curve_fit
 from scipy.integrate import trapezoid
 
 
-# ## Helper functions
+# Helper functions
 
 
 def export_df( df, path, name = 'df' ):
@@ -325,20 +326,21 @@ def import_data(
     return df
 
 
-# ## DataFrame functions
-
+# DataFrame functions
 
 def resample( df, method, value, how = 'linear' ):
     """
     Resamples a DataFrame.
 
-    :param method: Method to use for down sampling.
-        + values: Down samples to the given values.
-        + samples: Down samples to the given number of samples, evenly spaced.
-        + resolution: Down samples to the given resoltuion.
+    :param method: Method to use for resampling.
+        + values: Samples at the given values.
+        + samples: Samples to the given number of samples, evenly spaced.
+        + resolution: Samples to the given resoltuion.
     :param value: Values associated to the down sampling method.
-    :param how: Grouping method. [Default: linear]
-    :returns: Down sampled DataFrame.
+    :param how: Inter- / extrapolation method.
+        See pandas.DataFrame.interpolate for details.
+        [Default: linear]
+    :returns: Resampled DataFrame.
     """
     df = df.copy()
     index = df.index
@@ -779,7 +781,6 @@ def import_dataframe( path ):
 
 # DataFrame data functions
 
-
 def df_fit_function( fcn, param_names = None, guess = None, modify = None, **kwargs ):
     """
     Returns a function that fits a pandas DataFrame to a function.
@@ -952,8 +953,78 @@ def df_areal_difference( ref, df ):
     return diff.sum()
 
 
-# ## Mask functions
+def df_find_index_of_value( df, value, fit_window = 20, polydeg = 1 ):
+    """
+    Get the index for the given value.
+    Found using interpolation or extrapolation if 
+    the value does not exist in the dataframe.
+    Assumes that there is only one crossing of value
+    in each data series of the data.
 
+    :param df: Pandas DataFrame.
+    :param value: Value to find index of.
+    :param fit_window: Window size to inter/extrapolate if needed. [Default: 20]
+    :param polydeg: Degree of the polynomial to use for fitting. [Default: 1] 
+    :returns: A tuple of ( indices, fit )
+        `indices` is Pandas Series of the index for each data series.
+        `fit` is the numpy.Polynomial that was used for the fit.
+    """
+    df = df.sort_index()
+
+    index = pd.Series( index = df.columns, dtype = np.float64 )
+    pos = df[ df > value ]
+    neg = df[ df < value ]
+    for name, data in df.items():
+        # check if value exists in data
+        val_ind = data.index[ data == value ]
+        if val_ind.shape[ 0 ]:
+            index[ name ] = val_ind[ 0 ]
+            continue
+
+        dpos = pos[ name ].dropna()
+        dneg = neg[ name ].dropna()
+        if ( dpos.shape[ 0 ] and dneg.shape[ 0 ] ):
+            # data on both sides of zero
+            left, right = ( 
+                ( dpos, dneg ) 
+                if ( dpos.index.values.mean() < dneg.index.values.mean() ) else
+                ( dneg, dpos )
+            )
+
+            half_window = int( fit_window/ 2 )
+            tdf = pd.concat( [ left.iloc[ -half_window: ], right.iloc[ :half_window ] ] )
+
+        else:
+            # one sided data
+            tdf = dneg.iloc[ -fit_window: ] if dneg.shape[ 0 ] else dpos.iloc[ :fit_window ]
+
+        if tdf.shape[ 0 ] < 3:
+            index[ name ] = np.nan
+            continue
+
+        tdf = tdf.squeeze()
+        try:
+            fit = Polynomial.fit( tdf.index, tdf.values - value, deg = polydeg )  # shift values so value is a root
+        
+        except Exception as err:
+            print( err )
+            index[ name ] = np.nan
+
+        else:
+            roots = fit.roots()
+
+            # find root nearest to index values
+            root_dists = [
+                np.abs( tdf.index - root ).min()
+                for root in roots
+            ]
+            root = roots[ np.argmin( root_dists) ]
+            index[ name ] = root
+
+    return ( index.rename( df.index.names ), fit )
+
+
+# Mask functions
 
 def smooth_mask( mask, window = 10, fillna = 'backfill' ):
     """
@@ -1165,8 +1236,8 @@ def align_cycles( df, name = 'cycles' ):
     cycles = pd.concat( cycles, axis = 0 ).sort_index( 0 )
     return cycles
 
-# ## DataFrame calculus
 
+# DataFrame calculus
 
 def gradient_threshold(
     df,
