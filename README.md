@@ -40,6 +40,9 @@ Contains standard functions.
 #### Standard Functions
 Provides standard functions.
 
+#### Plot
+Provides plotting functionality and helper functions.
+
 ---
 
 ### JV Component

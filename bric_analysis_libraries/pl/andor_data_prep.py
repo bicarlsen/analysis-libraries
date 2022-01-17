@@ -44,38 +44,38 @@ for v_path in glob.glob( os.path.join( __root_mod_path, _data_path, '*' ) ):
 # convenience functions for common extractions
 
 def sample_from_file_name( file ):
-    name_search  = '^(.*?)' # use lazy matching
+    name_search  = '^(.*?)-' # use lazy matching
     return std.metadata_from_file_name( name_search, file )
 
 
 def angle_from_file_name( file ):
     angle_search = '<>deg'
-    return std.metadata_from_file_name( angle_search, file, True )
+    return std.metadata_from_file_name( angle_search, file, is_numeric = True )
 
 
 def power_from_file_name( file ):
-    power_search = '<>mw'
-    return std.metadata_from_file_name( power_search, file, True )
+    power_search = '<>[mu]?w'
+    return std.metadata_from_file_name( power_search, file, is_numeric = True )
 
 
 def time_from_file_name( file ):
     time_search  = '<>'
-    return std.metadata_from_file_name( time_search, file, True, decimal = 's' )
+    return std.metadata_from_file_name( time_search, file, is_numeric = True, decimal = 's' )
 
 
 def wavelength_from_file_name( file ):
     wavelength_search = '<>nm'
-    return std.metadata_from_file_name( wavelength_search, file, True )
+    return std.metadata_from_file_name( wavelength_search, file, is_numeric = True )
 
 
 def temperature_from_file_name( file ):
     temperature_search = '<>'
-    return std.metadata_from_file_name( temperature_search, file, True, decimal = 'k' )
+    return std.metadata_from_file_name( temperature_search, file, is_numeric = True, decimal = 'k' )
 
 
 def pressure_from_file_name( file ):
     pressure_search = '<>hpa'
-    return std.metadata_from_file_name( pressure_search, file, True, decimal = 'p' )
+    return std.metadata_from_file_name( pressure_search, file, is_numeric = True, decimal = 'p' )
 
 
 

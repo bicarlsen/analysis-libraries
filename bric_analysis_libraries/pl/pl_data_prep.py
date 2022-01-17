@@ -77,8 +77,7 @@ def index_to_energy( df, scale = False ):
 
         edf = edf.multiply( ratio, axis = 0 ) # multiply counts by normalized ratio
 
-    return edf
-
+    return edf.sort_index()
 
 
 def correct_spectra( df, correction ):

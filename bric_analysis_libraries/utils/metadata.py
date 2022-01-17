@@ -153,7 +153,7 @@ def metadata_to_dataframe_index( md_map, file, metadata, force_multi = False ):
         Callables should accept a single parameter which is the file name.
     :param file: The file path to search.
     :param metadata: Dictionary of metadata as passed to #get_metadata_values.
-    :param force_multi: Return pandas.MultiIndex even if only 
+    :param force_multi: Return pandas.MultiIndex even if only
         one metadata value is present.
         [Default: False]
     :returns: Pandas Index or MultiIndex representing the extracted metadata.
@@ -162,13 +162,17 @@ def metadata_to_dataframe_index( md_map, file, metadata, force_multi = False ):
     [See also: #get_metadata_values]
     """
     md = get_metadata( md_map, file, metadata )
+    names = tuple( md.keys() )
     if len( metadata ) == 1:
-        return pd.Index( md.values(), name = md.keys() )
+        return pd.Index(
+            md.values(),
+            name = names
+        )
 
     else:
         return pd.MultiIndex.from_tuples(
             [ md.values() ],
-            name = md.keys()
+            name = names
         )
 
 def metadata_dataframe_index_parser( md_map ):

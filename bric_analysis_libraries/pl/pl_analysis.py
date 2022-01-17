@@ -382,7 +382,7 @@ def extract_temperature(
         if tdf.shape[ 0 ] == 0:
             # no data
             fits[ name ] = None
-            logger.info( f'No data for { name } due to gradient masks.' )
+            logger.info( f'No data for { name } due to masking.' )
             continue
 
         # valid data, fit
