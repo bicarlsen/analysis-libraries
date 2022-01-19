@@ -1,30 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # EC Lab Analysis
-
-# ## Imports
-
-
-import numpy as np
-import pandas as pd
-
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-
-from bric_analysis_libraries import standard_functions as std
-
-
-# # Analysis
-
-
-def get_rest_times( df, index = 'voltage', threshold = 0 ):
-    """
-    Gets the amount of time.
-    :param df: The Pandas DataFrame containing the data.
-    :param index: The column name to.
-    """
-    pass
+# EC Lab Analysis
 
 
 def plot_measurement( ax, data, name ):

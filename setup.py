@@ -3,9 +3,12 @@ import setuptools
 with open( 'README.md', 'r' ) as f:
     long_desc = f.read()
 
+# get __version__
+exec( open( 'bric_analysis_libraries/_version.py' ).read() )
+
 setuptools.setup(
     name='bric-analysis-libraries',
-    version = '0.0.12',
+    version = __version__,
     author='Brian Carlsen',
     author_email = 'carlsen.bri@gmail.com',
     description = 'An assortment of analysis libraries.',

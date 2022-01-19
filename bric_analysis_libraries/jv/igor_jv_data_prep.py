@@ -1,25 +1,16 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # Igor JV Curve Analysis
+# Igor JV Curve Analysis
 # Used to import and analyze JV curves taken from Igor
 
-# ### Imports
 
-
-import os
-import sys
 import re
-import glob
-import math
 
 import numpy as np
 import pandas as pd
 
 from bric_analysis_libraries import standard_functions as std
-
-
-# # Data Prep
 
 
 def get_cell_name( content ):

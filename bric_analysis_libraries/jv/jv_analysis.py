@@ -1,10 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # JV Curve Analysis
-
-# ## Imports
-
+# JV Curve Analysis
 
 import math
 
@@ -16,7 +13,7 @@ from scipy.stats import linregress
 from bric_analysis_libraries import standard_functions as std
 
 
-# # Analysis
+# Analysis
 
 
 def ideal_diode( v, js, vt = 0.026, jp = 0 ):

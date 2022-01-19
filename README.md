@@ -50,15 +50,15 @@ Provides plotting functionality and helper functions.
 
 Contains data prep and analysis packages for JV experiments.
 
-#### Aging Analysis
-> Module name: `aging_analysis`
-
-Analysis of degradation mecahnisms
-
 #### Aging Data Prep
 > Module name: `aging_data_prep`
 
-Data prep from the stability lab.
+Data prep from the a custom built stability lab for solar cell degradation.
+
+#### Biologic Data Prep
+> Module name: `biologic_data_prep`
+
+Data prep
 
 #### EC Lab Analysis
 > Module name: `ec_lab_analysis`
@@ -80,6 +80,11 @@ Data prep of JV experiments coming from the old IV setup.
 
 Analysis of JV experiments.
 
+#### JV Data Prep
+> Module name: `jv_data_prep`
+
+Data prep for general JV data.
+
 ---
 
 ### PL Component
@@ -92,6 +97,11 @@ Contains data prep and analysis packages for PL experiments.
 
 Data prep for PL experiments from Andor Solis software.
 
+#### Lifespec Data Prep
+> Module name: `lifespec_data_prep`
+
+Data prep for Lifespec II TRPL instrument.
+
 #### Ocean Optics Data Prep
 > Module name: `ocean_optics_data_prep`
 
@@ -102,12 +112,27 @@ Data prep for PL experiments from Ocean Optics.
 
 Analysis of PL experiments.
 
+#### PL Data Prep
+> Module name: `pl_data_prep`
+
+Data prep for general PL experiments.
+
+#### TRPL Analysis
+> Module name: `trpl_analysis`
+
+Analysis for TRPL experiments.
+
 ---
 
 ### SCAPS Component
 > Component name: `scaps`
 
 Functions for analyzing [SCAPS](https://scaps.elis.ugent.be/) simulation results.
+
+#### Common
+> Module name: `common`
+
+Common functions.
 
 #### General
 > Module name: `gnr`
@@ -149,4 +174,25 @@ Data prep for QSoft quartz crystal microbalance acquisition software.
 #### QCM Analysis
 > Module name: `qcm_analysis`
 
-Analysis of quartz crystal microbalance experiments. 
+Analysis of quartz crystal microbalance experiments.
+
+
+#### Cary UV/Vis Absorption Spectrometer Data Prep
+> Component name: `cary_absorption_data_prep`
+
+Data prep for absorption spectra from a Cary UV/Vis spectrometer.
+
+#### XRD Data Prep
+> Component name: `xrd_data_prep`
+
+Data prep for XRD spectra.
+
+---
+
+### Utilities Component
+> Component name: `utils`
+
+#### Metadata
+> Component name: `metadata`
+
+Function for extracting metadata from files.

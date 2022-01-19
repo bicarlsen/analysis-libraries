@@ -1,10 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # Aging Setup Data Prep
-
-# ### Imports
-
+# Aging Setup Data Prep
 
 import os
 import io
@@ -20,10 +17,7 @@ import pandas as pd
 from bric_analysis_libraries import standard_functions as std
 
 
-# ## Data Prep
-
-
-# convenience functions
+# Convenience functions
 
 def sample_from_file_name( file ):
     name_search = '(.+?)'
@@ -67,7 +61,7 @@ def sample_channel_index( file, metrics, sample_index, channel_index ):
 
 def import_aging_datum( file, sample_index = True, channel_index = False ):
     """
-    Imports aging data from a _aging.txt file into a Pandas DataFrame.
+    Imports aging data from an _aging.txt file into a Pandas DataFrame.
 
     :param file: The file to import from.
     :param sample_index: If True the sample name is used from the file name

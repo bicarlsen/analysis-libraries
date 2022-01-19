@@ -1,18 +1,11 @@
 
 # coding: utf-8
 
-# # EC Lab Data Prep
+# EC Lab Data Prep
 
-# ### Imports
-
-
-import os
-import sys
 import re
-import glob
 import math
 import logging
-
 from collections import OrderedDict
 
 import numpy as np
@@ -21,10 +14,7 @@ import pandas as pd
 from bric_analysis_libraries import standard_functions as std
 
 
-# ## Data Prep
-
-
-# helper functions
+# Helper functions
 
 def get_channel_from_file_name( file, prefix = 'C' ):
     """
