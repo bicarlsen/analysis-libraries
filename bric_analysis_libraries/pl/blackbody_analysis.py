@@ -433,6 +433,9 @@ def best_linear_fit(
         + hdf - Only returned if `history` if True.
             List of return values from the the error function for each iteration.
     """
+    if error_fn is None:
+        error_fn = default_linear_fit_error
+
     # find inflection points
     cdf = df.apply( std.df_grad ).apply( std.df_grad )
     cdf = cdf.dropna( how = 'all' )
@@ -462,7 +465,7 @@ def best_linear_fit(
         err_change = 1
         while iteration < maxiter:
             # calculate errors
-            errors = calculate_errors(
+            errors = error_fn(
                 itdf,
                 inflection_pts = inflection_pts,
                 full_width = full_width,
