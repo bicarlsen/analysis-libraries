@@ -122,6 +122,11 @@ Data prep for general PL experiments.
 
 Analysis for TRPL experiments.
 
+#### Blackbody Analsysis
+> Module name: `blackbody_analysis`
+
+Methods for analyzing blackbody characteristics of PL spectra.
+
 ---
 
 ### SCAPS Component

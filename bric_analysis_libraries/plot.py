@@ -12,9 +12,8 @@ import matplotlib.pyplot as plt
 
 def set_plot_defaults():
     """
-    Set matplotlib plotting defautls
+    Set matplotlib plotting defaults.
     """
-
     # set plot format defaults
     mpl.rc( 'font', size = 16 )
     mpl.rc( 'xtick', labelsize = 14 )
@@ -31,7 +30,6 @@ def save_figure( path, kind = 'png', fig = None ):
     :param fig: Figure to save. If None, saves current figure.
         [Default: None]
     """
-
     if fig is None:
         fig = plt.gcf()
 
@@ -75,7 +73,7 @@ def ax_from_counter( counter, axs ):
     return ax
 
 
-def rows_needed( df, cols = 1, level = None ):
+def rows_needed( df, cols = 1, level = None, axis = 1):
     """
     Returns the number of rows needed for a plot, givent the number of columns.
 
@@ -85,16 +83,20 @@ def rows_needed( df, cols = 1, level = None ):
         or None to count each column.
         If `df` is a DataFrameGroupBy, this does not have any effect.
         [Default: None]
+    :param axis: Axis to determine rows from.
+        Not applicable if `df` is a DataFrameGroupBy.
+        [Default: 1]
+    :returns: Number of rows needed for iterating over the data frame given the number of columns.
     """
     if isinstance( df, pd.core.groupby.DataFrameGroupBy ):
         num_plots = len( df )
 
     else:
         if level is not None:
-            num_plots = df.columns.get_level_values( level ).unique().shape[ 0 ]
+            num_plots = df.axes[ axis ].get_level_values( level ).unique().shape[ 0 ]
 
         else:
-            num_plots = df.columns.shape[ 0 ]
+            num_plots = df.axes[ axis ].shape[ 0 ]
 
     return int( np.ceil( num_plots/ cols ) )
 
@@ -299,6 +301,70 @@ def temperature_plot_rainbow(
         cbar.set_label( cbar_label, labelpad = 15 )
 
     return ( fig, ax )
+
+
+def color_plot_2d(
+    df,
+    shading = 'nearest',
+    colorbar = True,
+    ax = None,
+    **kwargs
+):
+    """
+    Creates a 2D color plot from a DataFrame.
+    The DataFrame must have a pandas.index for both
+    the index and columns, i.e. non pandas.MultiIndex's.
+    The columns map to the x-axis, and the index to the y-axis.
+
+    :param df: DataFrame.
+    :param shading: Shading to use.
+        Values are [ 'nearest', 'gouraud' ].
+        [Default: 'nearest']
+    :param colorbar: Include colorbar. [Defualt: True]
+    :param ax: Axis to plot on.
+        If None creates a new axis.
+        [Default: None]
+    :param **kwargs: Args passed to the plotting function.
+    :returns: ( img, axs, fig )
+    :raises TypeError: If DataFrame's index or columns are not a pandas.Index.
+    :raises ValueError: If `shading` is not valid. 
+    """
+    if not(
+        isinstance( df.index, pd.Index ) and
+        isinstance( df.columns, pd.Index )
+    ):
+        raise TypeError( 'Both index and columns must be pandas.Index, no MultiIndexes are allowed.' )
+
+    if shading not in [ 'nearest', 'gouraud' ]:
+        raise ValueError( 'Invalid shading value. Must be in [ "nearest", "gouraud" ].' )
+
+    x, y = np.meshgrid( df.columns, df.index )
+
+    if ax is not None:
+        img = ax.pcolormesh( x, y, df.values, shading = shading, **kwargs )
+        
+        if colorbar:
+            plt.colorbar( img, ax = ax )
+        
+        fig = ax.get_figure()
+        return ( img, ax, fig )
+
+    img = plt.pcolormesh( x, y, df.values, shading = shading, **kwargs )
+    
+    fig = img.get_figure()
+    if colorbar:
+        fig.colorbar( img )
+
+    axs = fig.get_axes()
+    ax = axs[ 0 ]
+    ax.set_xlabel( df.columns.name )
+    ax.set_ylabel( df.index.name )
+
+    if not colorbar:
+        # only one axes, pick it
+        axs = axs[ 0 ]
+
+    return ( img, axs, fig )
 
 
 def outer_plot(
