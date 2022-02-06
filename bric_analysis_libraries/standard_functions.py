@@ -1032,10 +1032,9 @@ def smooth_mask( mask, window = 10, fillna = 'backfill' ):
 
     :param mask: Mask to smooth.
     :param window: Smoothing window. [Default: 10]
-    :param fillna: Method to fill na values from smoothing,
-        or None to leave as na.
-        [See pandas.Series#fillna]
-        [Default: 'backfill']
+    :param fillna: True to fill NaN values from smoothing,
+        or False to leave as NaN.
+        [Default: True]
     :returns: Smoothed mask.
     """
     # convert False/True to 0/1
@@ -1052,11 +1051,14 @@ def smooth_mask( mask, window = 10, fillna = 'backfill' ):
         df = pd.Series( map( int, mask ) )
 
     # smooth values and convert back to False/True
-    df = df.rolling( window = window ).mean()
-    if fillna is not None:    
-        df = df.fillna( method = fillna )
-    df = df.apply( round )
-    df = df.apply( bool )
+    df = df.rolling( window = window, center = True ).mean()
+    if fillna:    
+        df = df.fillna( method = 'bfill' ).fillna( method = 'ffill' )
+
+    df = df.apply( np.around )
+
+    nan_mask = ~df.isna()
+    df[ nan_mask ] = df[ nan_mask ].apply( bool )
 
     return df.values
 
