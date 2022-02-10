@@ -10,7 +10,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.stats import linregress
 
-from bric_analysis_libraries import standard_functions as std
+from .. import standard_functions as std
 
 
 # Analysis
@@ -331,7 +331,7 @@ def get_voc( df, fit_window = 20 ):
     :param fit_window: Window size to extrapolate if needed. [Default: 20]
     :returns: A Pandas Series of open circuit voltages.
     """
-    roots = std.df_find_index_of_value( df, 0, fit_window = fit_window, deg = 1 )
+    roots = std.df_find_index_of_value( df, 0, fit_window = fit_window, polydeg = 1 )
     voc = roots[ 0 ]
     return voc.rename( 'voc' )
 

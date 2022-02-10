@@ -8,8 +8,8 @@ import sys
 
 import pandas as pd
 
-from bric_analysis_libraries import standard_functions as std
-from bric_analysis_libraries.utils import metadata
+from .. import standard_functions as std
+from ..utils import metadata
 
 
 # Data Prep

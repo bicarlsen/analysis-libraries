@@ -11,8 +11,8 @@ import logging
 import numpy as np
 import pandas as pd
 
-from bric_analysis_libraries import standard_functions as std
-from bric_analysis_libraries.jv import jv_data_prep as jvdp
+from .. import standard_functions as std
+from . import jv_data_prep as jvdp
 
 # ## Data Prep
 

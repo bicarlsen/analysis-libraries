@@ -15,7 +15,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from bric_analysis_libraries import standard_functions as std
+from .. import standard_functions as std
 
 
 
