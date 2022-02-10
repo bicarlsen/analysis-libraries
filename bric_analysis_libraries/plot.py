@@ -7,6 +7,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib as mpl
+import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 
 
@@ -19,6 +20,78 @@ def set_plot_defaults():
     mpl.rc( 'xtick', labelsize = 14 )
     mpl.rc( 'ytick', labelsize = 14 )
     mpl.rc( 'figure', figsize = ( 10, 8 ) )
+
+
+def get_scaled_colormap( name, min_val = 0, max_val = 1, raise_err = False ):
+    """
+    :param name: Name of the color map.
+    :param min_val: Minimum value of range. [Default: 0]
+    :param max_val: Maximum value of range. [Default: 1]
+    :param raise_err: Raise an error if value is outside bounds.
+        If False, clips to range.
+        [Default: False]
+    :returns: Function that take in 
+    """
+    cmap = cm.get_cmap( name )
+    val_range = max_val - min_val
+    def _scaled_map( val ):
+        """
+        Converts a value in a range to a color value.
+
+        :param val: Value or iterable of values to convert to a color.
+        :returns: ( r, g, b, a ) or list of ( r, g, b, a ) color values.
+        """
+        if not( isinstance( val, int ) or isinstance( val, float ) ):
+            val = np.array( val )
+
+        norm_val = ( val - min_val )/ val_range
+        if raise_err:
+            if ( norm_val < 0 ) or ( norm_val > 1 ):
+                raise ValueError( 'Value outside bounds.' )
+
+        np.clip( norm_val, a_min = 0, a_max = 1 )
+        return cmap( norm_val )
+
+
+    return _scaled_map
+
+
+def fig_for_publication( fig, font = None, label_map = None ):
+    """
+    Set a figures fonts for publication.
+
+    :param fig: Figure to prepare.
+    :param font: Dictionary of font values.
+        Only keys that should be changes from the default should be included.
+        + major_label_size: Font size of the major labels. [Default: 24]
+        + major_labelpad: Padding of the major labels. [Default: 15]
+        + major_tick_size: Font size of the major tick labels. [Default: 18]
+    :param label_map: Dictionary of labels and their mapped values. [Default: {}]
+    """
+    if font is None:
+        font = {}
+
+    if label_map is None:
+        label_map = {}
+
+    defaults = {
+        'major_label_size': 24,
+        'major_labelpad': 15,
+        'major_tick_size': 18
+    }
+
+    font = { **defaults, **font }
+
+    for ax in fig.axes:
+        saxs = [ ax.xaxis, ax.yaxis ]
+        for sax in saxs:
+            lbl_text = sax.label.get_text()
+            if lbl_text in label_map:
+                sax.label.set_text( label_map[ lbl_text ] )
+
+            sax.label.set_fontsize( font[ 'major_label_size' ] )
+            sax.labelpad = font[ 'major_labelpad' ]
+            sax.set_tick_params( labelsize = font[ 'major_tick_size' ] )
 
 
 def save_figure( path, kind = 'png', fig = None ):
@@ -73,30 +146,43 @@ def ax_from_counter( counter, axs ):
     return ax
 
 
-def rows_needed( df, cols = 1, level = None, axis = 1):
+def rows_needed( df, cols = 1, level = None, axis = 1 ):
     """
     Returns the number of rows needed for a plot, givent the number of columns.
 
-    :param df: DataFrame or DataFrameGroupBy.
+    :param df: DataFrame, DataFrameGroupBy, Series, or SeriesGroupBy.
     :param cols: Number of columns. [Default: 1]
     :param level: DataFrame level to use for grouping,
         or None to count each column.
-        If `df` is a DataFrameGroupBy, this does not have any effect.
+        If `df` is a DataFrameGroupBy or SeriesGroupBy this does not have an effect.
         [Default: None]
     :param axis: Axis to determine rows from.
-        Not applicable if `df` is a DataFrameGroupBy.
+        Not applicable if `df` is not DataFrame.
         [Default: 1]
     :returns: Number of rows needed for iterating over the data frame given the number of columns.
     """
-    if isinstance( df, pd.core.groupby.DataFrameGroupBy ):
+    if (
+        isinstance( df, pd.core.groupby.DataFrameGroupBy ) or
+        isinstance( df, pd.core.groupby.SeriesGroupBy )
+    ):
         num_plots = len( df )
 
-    else:
+    elif (
+        isinstance( df, pd.DataFrame ) or
+        isinstance( df, pd.Series )
+    ):
+        if isinstance( df, pd.Series ):
+            axis = 0
+
         if level is not None:
             num_plots = df.axes[ axis ].get_level_values( level ).unique().shape[ 0 ]
 
         else:
             num_plots = df.axes[ axis ].shape[ 0 ]
+
+    else:
+        # invalid type
+        raise TypeError( 'Invalid `df` object. Must be a pandas DataFrame, DataFrameGroupBy, Series, or SeriesGroupBy.' )
 
     return int( np.ceil( num_plots/ cols ) )
 
@@ -231,6 +317,8 @@ def temperature_plot_rainbow(
         [Default: False]
     :param cmap: Colormap to use. [Defualt: 'jet']
     :param **kwargs: Arguments passed to pandas.DataFrame#plot
+    :returns: Tuple of ( fig, ax ) if colorbar is False,
+        or ( fig, axs, cbar ) if colorbar is True.
     """
     is_df = isinstance( df, pd.DataFrame )
     if ax is None:
@@ -300,7 +388,11 @@ def temperature_plot_rainbow(
 
         cbar.set_label( cbar_label, labelpad = 15 )
 
-    return ( fig, ax )
+    if colorbar:
+        return ( fig, ax, cbar )
+
+    else:
+        return ( fig, ax )
 
 
 def color_plot_2d(

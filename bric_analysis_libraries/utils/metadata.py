@@ -5,7 +5,7 @@ from functools import partial
 
 import pandas as pd
 
-import bric_analysis_libraries.standard_functions as std
+from .. import standard_functions as std
 
 
 def get_standard_metadata_value( md_map, file, metadata ):

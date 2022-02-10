@@ -5,7 +5,6 @@
 
 import logging
 from numbers import Number
-from collections.abc import Iterable
 
 import pandas as pd
 import numpy as np
@@ -22,21 +21,7 @@ from   scipy.stats     import linregress
 from .. import standard_functions as std
 
 
-# Helper functions
-
-def convert_beta_temperature( p ):
-    """
-    Converts beta (coldness) to temperature and vice versa.
-
-    :param p: Temperature in Kelvin or beta (coldness).
-    :returns: Beta (coldness) if temperature was given,
-
-        Temperature in Kelvin if beta was given.
-    """
-    return 1/( phys.physical_constants[ 'Boltzmann constant in eV/K' ][ 0 ]* p )
-
-
-# ## Distributions
+# Distributions
 
 
 def gaussian_distribution( mu = 0, sigma = 1, x = None ):

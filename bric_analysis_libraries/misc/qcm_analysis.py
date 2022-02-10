@@ -13,7 +13,7 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-from bric_analysis_libraries import standard_functions as std
+from .. import standard_functions as std
 
 
 # # Analysis

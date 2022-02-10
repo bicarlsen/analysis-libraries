@@ -1,12 +1,45 @@
 # pl / blackbody analysis
 
 import logging
+from collections.abc import Iterable
 
 import numpy as np
 import pandas as pd
+import scipy.constants as phys
 from scipy.stats import linregress
+from scipy.signal import savgol_filter as savgol
 
 from .. import standard_functions as std
+
+
+def slope_to_beta( slope, side = 'high' ):
+    """
+    Converts a linear fit slope to beta.
+    Beta and slope are same value,
+    just determines if it needs to be multiplied by -1
+    based on the side.
+
+    :param slope: Slope to convert.
+    :param side: High or low energy.
+        Valid values: [ 'high', 'low' ]
+        [Default: 'high']
+    """
+    if side == 'high':
+        slope *= -1
+
+    return slope
+
+
+def convert_beta_temperature( p ):
+    """
+    Converts beta (coldness) to temperature and vice versa.
+
+    :param p: Temperature in Kelvin or beta (coldness).
+    :returns: Beta (coldness) if temperature was given,
+
+        Temperature in Kelvin if beta was given.
+    """
+    return 1/( phys.physical_constants[ 'Boltzmann constant in eV/K' ][ 0 ]* p )
 
 
 def linear_fit_threshold(
@@ -95,10 +128,7 @@ def linear_fit_threshold(
             logger.info( f'Could not fit { name }.' )
             continue
 
-        beta = fit.slope
-        if side == 'high':
-            beta *= -1
-
+        beta = slope_to_beta( fit.slope, side = side )
         temp = convert_beta_temperature( beta )
         fits[ name ] = ( temp, fit )
 
@@ -318,7 +348,7 @@ def default_linear_fit_error(
         tdf = df[
             ( df.index >= x0 - w0/ 2 ) &
             ( df.index <= x0 + w0/ 2 )
-        ]
+        ].dropna()
         
         if tdf.shape[ 0 ] < 2:
             continue
@@ -326,7 +356,9 @@ def default_linear_fit_error(
         x = tdf.index
         y = tdf.values
         fit = linregress( x, y )
-        
+        if np.isnan( fit.slope ):
+            continue
+
         fits[ ( x0, w0 ) ] = ( fit, tdf )
         
     if len( fits ) == 0:
@@ -352,14 +384,18 @@ def default_linear_fit_error(
         
         rms = np.trapz( np.absolute( y_fit - y ), x )
         ref_area = np.trapz( tdf - tdf.min(), tdf.index )
-        rms_err = rms/ ref_area
-        
+        if not ref_area:
+            rms_err = 1
+
+        else:
+            rms_err = rms/ ref_area
+
         width_err = 1 - w0/ max_width
         
         slope_err = abs( ( fit.slope - ref_slope )/ ref_slope )
 
         if inflection_pts is not None:
-            inflection_err = min( [
+            inflection_err = np.nanmin( [
                 x0 - xi
                 for xi in inflection_pts
             ] )
@@ -376,14 +412,13 @@ def default_linear_fit_error(
             inflection_err,
             slope_err
         )
-    
         energy = np.dot( weights, errs )/ np.sum( weights )
         errors[ ( x0, w0 ) ] = energy
     
     return errors
 
 
-def best_linear_fit(
+def linear_fit_search(
     df,
     grid = ( 10, 10 ),
     weights = None,
@@ -394,8 +429,8 @@ def best_linear_fit(
     history = False
 ):
     """
-    Use a simple gradient descent in ( center x width ) space
-    to find the best fit.
+    Use a simple search in ( center x width ) space
+    to find the best linear fit for the data quantified by an error function.
 
     :param df: DataFrame to fit.
     :param grid: Grid size to break space into on each iteration.
@@ -412,7 +447,7 @@ def best_linear_fit(
         Should return a dictionary keyed by ( center, width ) and 
         values of the error.
 
-        If None uses #default_linear_fit_error
+        If None uses #default_linear_fit_error with default weights.
         [See #default_linear_fit_error for an example]
         [Default: None]
     :param tolerance: Maximum relative change in error to terminate fitting.
@@ -436,6 +471,10 @@ def best_linear_fit(
     if error_fn is None:
         error_fn = default_linear_fit_error
 
+        if weights is None:
+            weights = np.ones( 4 )
+
+
     # find inflection points
     cdf = df.apply( std.df_grad ).apply( std.df_grad )
     cdf = cdf.dropna( how = 'all' )
@@ -448,16 +487,42 @@ def best_linear_fit(
         idf.append( sdf )
     
     idf = pd.concat( idf, axis = 1 )
-
     hdf = {}
     converged = {}
     rdf = {}
     for name, tdf in df.items():
-        inflection_pts = idf.loc[ name ]
         converged[ name ] = False
-        thdf = []
+        data_peak = tdf.idxmax()
 
-        wtdf = tdf.dropna().index
+        # mask data by side
+        mask = (
+            tdf.index < data_peak
+            if side == 'low' else
+            tdf.index > data_peak
+        )
+
+        if not np.any( mask ):
+            # no valid data
+            rdf[ name ] = None
+            logger.info( f'No data for { name } due to side mask.' )
+            continue
+
+        tdf = tdf[ mask ]
+        tdf = tdf.dropna()
+        
+        # get relevant inflection points
+        inflection_pts = idf.loc[ :, name ].dropna()
+        mask = (
+            inflection_pts < data_peak
+            if side == 'low' else
+            inflection_pts > data_peak
+        )
+
+        inflection_pts = inflection_pts[ mask ]
+
+        # init fitting
+        thdf = []
+        wtdf = tdf.index
         full_width = wtdf.max() - wtdf.min()
         
         itdf = tdf
@@ -479,7 +544,6 @@ def best_linear_fit(
                 break
             
             edf = pd.Series( errors ) 
-            
             if history:
                 thdf.append( errors )
             
@@ -541,3 +605,109 @@ def best_linear_fit(
         ret.append( hdf )
         
     return tuple( ret )
+
+
+def center_width_to_fit_df(
+    df,
+    cw_df
+):
+    """
+    Takes a DataFrame and Series of ( center, width ) values
+    calculating the fit data and fit of that data for each data series.
+    
+    For use with #linear_fit_search results.
+    e.g.
+    cw, _ = blackbody_analysis.linear_fit_search( df )
+    fit_results = blackbody_analysis.center_width_to_df( df, cw )
+
+    :param df: Original DataFrame that was fit.
+    :param cw_df:  pandas.Series of ( center, width ) values indexed by data name.
+        [Value of index 0 of result returned from #best_linear_fit]
+    :returns: Dictionary keyed by data series name with values ( fit_df, fit ),
+        where fit_df is the fit data, and fit is the linear fit from scypi.stats#linregress.
+    """
+    fdf = {}
+    for name, tdf in df.items():
+        x0, w0 = cw_df.loc[ name  ]
+        min_x = x0 - w0/2
+        max_x = x0 + w0/2
+
+        tdf = tdf.dropna()
+        fit_df = tdf[ ( min_x <= tdf.index ) & ( tdf.index <= max_x ) ]
+        fit = linregress( fit_df.index, fit_df.values )
+
+        fdf[ name ] = ( fit_df, fit )
+
+    return fdf
+
+
+def temperature_fit_using_search(
+    df,
+    smooth_kwargs = None,
+    search_kwargs = None
+):
+    """
+    Extract the temperature using a linear fit search.
+    Uses #linear_fit_search.
+
+    :param df: DataFrame to fit.
+    :param smooth_kwargs: Dictionary of keyword arguments passed to scipy.signal#savgol_filter, or False.
+        + If None uses default value of 
+            { window_length: 0.01* df.shape[ 0 ], polyorder = 2 }
+        + If False, does not smooth.
+        [Default: None]
+    :param search_kwargs: Dictionary of keyword arguments passed to #linear_fit_search.
+        [Default: None]
+    :returns: Tuple of ( temperatures, fits, results )
+        where temperatures is a Pandas.Series of the extracted temperatures,
+        fits is the return value from #center_width_to_fit_df, and
+        results is the return value of #linear_fit_search.
+    """
+    df = df.clip( lower = 1 )
+    ldf = df.apply( np.log )
+
+    # smooth data
+    if smooth_kwargs is not False:
+        if smooth_kwargs is None:
+            n_pts = ldf.shape[ 0 ]
+            window = int( 0.01* n_pts )
+            if not ( window % 2 ):
+                # ensure odd window
+                window += 1
+
+            smooth_kwargs = {
+                'window_length': window,
+                'polyorder': 2
+            }
+        
+        smooth = lambda x: savgol( x, **smooth_kwargs )
+        
+        ldf = std.resample( ldf, method = 'samples', value = n_pts )
+        ldf = ldf.apply( smooth )
+
+    # fit data
+    res = linear_fit_search( ldf, **search_kwargs )
+    fits = center_width_to_fit_df( ldf, res[ 0 ] )
+
+    # extract temperatures
+    slopes = { name: fit.slope for name, ( _, fit ) in fits.items() }
+
+    side = (
+        search_kwargs[ 'side' ]
+        if 'side' in search_kwargs else
+        'high'
+    )
+
+    betas = {
+        name: slope_to_beta( slope, side = side )
+        for name, slope in slopes.items()
+    }
+
+    temps = {
+        name: convert_beta_temperature( beta )
+        for name, beta in betas.items()
+    }
+
+    temps = pd.Series( temps )
+
+    return ( temps, fits, res )

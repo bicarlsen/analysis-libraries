@@ -192,6 +192,11 @@ Data prep for absorption spectra from a Cary UV/Vis spectrometer.
 
 Data prep for XRD spectra.
 
+#### ARS Cryostat Data Prep
+> Component name: `ars_cryostat_data_prep`
+
+Data prep for measurements taken using the ARS cryostat.
+
 ---
 
 ### Utilities Component

@@ -1038,6 +1038,7 @@ def smooth_mask( mask, window = 10, fillna = 'backfill' ):
     :returns: Smoothed mask.
     """
     # convert False/True to 0/1
+    return_series = True
     if isinstance( mask, pd.DataFrame ):
         if mask.shape[ 1 ] > 1:
             raise TypeError( 'Mask can not have more than one column.' )
@@ -1049,6 +1050,7 @@ def smooth_mask( mask, window = 10, fillna = 'backfill' ):
 
     else:
         df = pd.Series( map( int, mask ) )
+        return_series = False
 
     # smooth values and convert back to False/True
     df = df.rolling( window = window, center = True ).mean()
@@ -1057,10 +1059,14 @@ def smooth_mask( mask, window = 10, fillna = 'backfill' ):
 
     df = df.apply( np.around )
 
-    nan_mask = ~df.isna()
+    nan_mask = df.isna().apply( np.logical_not )
     df[ nan_mask ] = df[ nan_mask ].apply( bool )
 
-    return df.values
+    if return_series:
+        return df
+
+    else:
+        return df.values
 
 
 def mask_from_threshold(
@@ -1525,3 +1531,34 @@ def integrate_df( df ):
     }
 
     return pd.Series( data )
+
+
+def rescale_values( x, r_min, r_max, d_min = None, d_max = None ):
+    """
+    Rescale values to reference range 
+    using high and low key points.
+    
+    d_min <---- x0 ---- x1 ---- x2 ----> d_max
+                 \       \      |
+                  --      |     |  
+                    \     |     |
+          r_min <-- x0 -- x1 -- x2 --> r_max
+    
+    :param x: numpy.array of values to convert.
+    :param r_min: Range min value.
+    :param r_max: Range max value.
+    :param d_min: Domain min value. If None uses min value in `x`.
+        [Default: None]
+    :param d_max: Domain max value. If None uses max value in `x`.
+        [Default: None]
+    :returns: Rescaled values from domain to range.
+    """
+    if d_min is None:
+        d_min = x.min()
+        
+    if d_max is None:
+        d_max = x.max()
+        
+    scaled = ( x - d_min )/( d_max - d_min )
+    rng = r_max - r_min
+    return scaled* rng + r_min

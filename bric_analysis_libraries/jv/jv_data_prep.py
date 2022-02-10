@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 
-import bric_analysis_libraries.standard_functions as std
+from .. import standard_functions as std
 
 
 def split_jv_scan( df ):
