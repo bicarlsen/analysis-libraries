@@ -209,14 +209,14 @@ def peak_position( df, start = None, end = None ):
     :param df: A Pandas DataFrame containing the spectrum.
     :param start: Lower bound of the search range, or None. [Default: None]
     :param end: Upper bound of the search range, or None. [Default: None]
-    :returns: A Pandas DataSeries container positions of the max.
+    :returns: A Pandas Series container positions of the max.
     """
     peak = df.loc[ start : end ].idxmax()
     if not isinstance( peak, pd.Series ):
         # single columns passed in, transform back to Series
-        peak = pd.Series( peak, index = df.index, name = 'peak' ).rename( 'peak' )
+        peak = pd.Series( peak, index = df.index, name = 'peak' )
 
-    return peak
+    return peak.rename( 'peak' )
 
 
 def center_of_mass( df ):
@@ -229,7 +229,7 @@ def center_of_mass( df ):
     idx = df.index
     weights = df/ df.sum()
     com = weights.multiply( idx, axis = 0 ).sum()
-    return com
+    return com.rename( 'com' )
 
 
 def integrated_intensity( df, start = None, end = None ):
@@ -242,8 +242,8 @@ def integrated_intensity( df, start = None, end = None ):
     :returns: A Pandas DataFrame of spectral areas.
     """
     df = df.loc[ start : end ]
-    return df.apply( lambda datum: integrate.simps( datum ) ).rename( 'area' )
-
+    df = std.integrate_df( df )
+    return df.rename( 'area' )
 
 def peak_analysis( df, groups = None, start = None, end = None ):
     """
@@ -266,30 +266,30 @@ def peak_analysis( df, groups = None, start = None, end = None ):
 
     if groups is None:
         # return data sample by sample, no statistics
-        return pd.concat(
-
+        pdf = pd.concat(
             [ peaks, fw, area ],
-
             axis = 1,
-
             keys = [ 'peak', 'fwhm', 'area' ]
-
         )
 
-    # group analysis, include statistics
-    peaks = peaks.groupby( groups )
-    fw    = fwhm.groupby(  groups )
-    area  = area.groupby(  groups )
 
-    return pd.concat( [
+    else:
+        # group analysis, include statistics
+        peaks = peaks.groupby( groups )
+        fw    = fwhm.groupby( groups )
+        area  = area.groupby( groups )
 
-        peaks.mean().rename( ( 'peak', 'mean' ) ),
-        peaks.std().rename(  ( 'peak', 'std' ) ),
-        fw.mean().rename( ( 'fwhm', 'mean' ) ),
-        fw.std().rename(  ( 'fwhm', 'std' ) ),
-        area.mean().rename( ( 'area', 'mean' ) ),
-        area.std().rename(  ( 'area', 'std' ) )
-    ], axis = 1 )
+        pdf = pd.concat( [
+            peaks.mean().rename( ( 'peak', 'mean' ) ),
+            peaks.std().rename(  ( 'peak', 'std' ) ),
+            fw.mean().rename( ( 'fwhm', 'mean' ) ),
+            fw.std().rename(  ( 'fwhm', 'std' ) ),
+            area.mean().rename( ( 'area', 'mean' ) ),
+            area.std().rename(  ( 'area', 'std' ) )
+        ], axis = 1 )
+
+    pdf.index = pdf.index.rename( df.columns.names )
+    return pdf
 
 
 # ## Spectral functions

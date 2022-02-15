@@ -23,6 +23,7 @@ def slope_to_beta( slope, side = 'high' ):
     :param side: High or low energy.
         Valid values: [ 'high', 'low' ]
         [Default: 'high']
+    :returns: Beta value of the slope.
     """
     if side == 'high':
         slope *= -1
@@ -36,8 +37,7 @@ def convert_beta_temperature( p ):
 
     :param p: Temperature in Kelvin or beta (coldness).
     :returns: Beta (coldness) if temperature was given,
-
-        Temperature in Kelvin if beta was given.
+        temperature in Kelvin if beta was given.
     """
     return 1/( phys.physical_constants[ 'Boltzmann constant in eV/K' ][ 0 ]* p )
 
@@ -63,9 +63,8 @@ def linear_fit_threshold(
     :param curve_threshold: Maximum curvature threshold. [Default: 1000]
     :param side: 'low' for low energy, 'high' for high energy. [Default: 'high']
     :param mask_window: Smoothing window for data mask. [Default: 75]
-    :returns: Dictionary of tuples of ( temperature, linear fit ).
-        If no valid data for a particular dataset vlaue is None.
-
+    :returns: Dictionary of tuples of ( temperature, linear fit ), keyed by data name.
+        If no valid data for a particular dataset value is None.
     """
     logger = logging.getLogger( __name__ )
     df = df.copy()
