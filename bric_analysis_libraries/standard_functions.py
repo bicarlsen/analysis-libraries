@@ -863,18 +863,19 @@ def df_fit_function( fcn, param_names = None, guess = None, modify = None, **kwa
         fits = pd.DataFrame( fits )
         fits.columns = fits.columns.rename( [ 'parameter', 'metric' ] )
 
-        if isinstance( df.index, pd.Index ):
-            fits.index = pd.Index(
-                fits.index.values,
-                name = mdf.index.name
-            )
-
-        elif isinstance( df.index, pd.MultiIndex ):
+        if isinstance( df.columns, pd.MultiIndex ):
+            # must go first as MultiIndex is also an Index
             fits.index = pd.MultiIndex.from_tuples(
                 fits.index.values,
                 names = mdf.columns.names
             )
 
+        elif isinstance( df.columns, pd.Index ):
+            fits.index = pd.Index(
+                fits.index.values,
+                name = mdf.index.name
+            )
+        
         else:
             raise TypeError( 'Unknown type of index encountered.')
 
@@ -967,18 +968,20 @@ def df_find_index_of_value( df, value, fit_window = 20, polydeg = 1 ):
     :param polydeg: Degree of the polynomial to use for fitting. [Default: 1] 
     :returns: A tuple of ( indices, fit )
         `indices` is Pandas Series of the index for each data series.
-        `fit` is the numpy.Polynomial that was used for the fit.
+        `fit` is the numpy.Polynomial that was used for the fit,
+            or None if the fit was not needed due to an exact match 
+            or did not converge.
     """
     df = df.sort_index()
 
-    index = pd.Series( index = df.columns, dtype = np.float64 )
+    val_index = pd.DataFrame( index = df.columns, columns = ( 'index', 'fit' ) )
     pos = df[ df > value ]
     neg = df[ df < value ]
     for name, data in df.items():
         # check if value exists in data
         val_ind = data.index[ data == value ]
         if val_ind.shape[ 0 ]:
-            index[ name ] = val_ind[ 0 ]
+            val_index.loc[ name ] = [ val_ind[ 0 ], None ]
             continue
 
         dpos = pos[ name ].dropna()
@@ -999,16 +1002,16 @@ def df_find_index_of_value( df, value, fit_window = 20, polydeg = 1 ):
             tdf = dneg.iloc[ -fit_window: ] if dneg.shape[ 0 ] else dpos.iloc[ :fit_window ]
 
         if tdf.shape[ 0 ] < 3:
-            index[ name ] = np.nan
+            val_index.loc[ name ] = [ np.nan, None ]
             continue
 
         tdf = tdf.squeeze()
         try:
             fit = Polynomial.fit( tdf.index, tdf.values - value, deg = polydeg )  # shift values so value is a root
-        
+            
         except Exception as err:
             print( err )
-            index[ name ] = np.nan
+            val_index.loc[ name ] = [ np.nan, None ]
 
         else:
             roots = fit.roots()
@@ -1019,9 +1022,10 @@ def df_find_index_of_value( df, value, fit_window = 20, polydeg = 1 ):
                 for root in roots
             ]
             root = roots[ np.argmin( root_dists) ]
-            index[ name ] = root
+        
+            val_index.loc[ name ] = [ root, fit ]
 
-    return ( index.rename( df.index.names ), fit )
+    return val_index
 
 
 # Mask functions
@@ -1525,12 +1529,15 @@ def integrate_df( df ):
         df = df.to_frame()
 
     x = df.index
-    data = {
-        name: trapezoid( vals, x )
-        for name, vals in df.items()
-    }
+    data = {}
+    for name, tdf in df.items():
+        tdf = tdf.dropna()
+        data[ name ] = trapezoid( tdf.values, tdf.index )
 
-    return pd.Series( data )
+    sd = pd.Series( data, name = 'area' )
+    sd.index = sd.index.rename( df.columns.names )
+
+    return sd
 
 
 def rescale_values( x, r_min, r_max, d_min = None, d_max = None ):

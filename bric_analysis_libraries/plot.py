@@ -11,15 +11,52 @@ import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 
 
-def set_plot_defaults():
+# @todo: use dataclass
+"""
+Base font
+"""
+font_base = {
+    'figure': { 'figsize': ( 10, 8 ) }
+}
+
+"""
+Default font.
+Use for data exploration.
+"""
+font_def = {
+    **font_base,
+    'font': { 'size': 16 },
+    'xtick': { 'labelsize': 14 },
+    'ytick': { 'labelsize': 14 },
+}
+
+
+"""
+Publication font.
+Use for publication figures.
+Enlarged font for better readability on paper.
+"""
+font_pub = {
+    **font_base,
+    'font': { 'size': 24 },
+    'xtick': { 'labelsize': 18 },
+    'ytick': { 'labelsize': 18 },
+    'axes': { 'labelpad': 15, 'titlepad': 15 },
+}
+
+
+def set_plot_defaults( font = font_def ):
     """
     Set matplotlib plotting defaults.
+
+    :param font: Dictionary representing the font to set.
+        Keys should be the matplotlib.pyplot.rcParams.group.
+        Values are a dictionary of the arguments to set for the group,
+        keyed by argument name with values the value to set.
+        [Default: bric_analysis_libraries.plot.font_def]
     """
-    # set plot format defaults
-    mpl.rc( 'font', size = 16 )
-    mpl.rc( 'xtick', labelsize = 14 )
-    mpl.rc( 'ytick', labelsize = 14 )
-    mpl.rc( 'figure', figsize = ( 10, 8 ) )
+    for group, args in font.items():
+        mpl.rc( group, **args )
 
 
 def get_scaled_colormap( name, min_val = 0, max_val = 1, raise_err = False ):
@@ -30,7 +67,8 @@ def get_scaled_colormap( name, min_val = 0, max_val = 1, raise_err = False ):
     :param raise_err: Raise an error if value is outside bounds.
         If False, clips to range.
         [Default: False]
-    :returns: Function that take in 
+    :returns: Function that accepts an argument of the value,
+        and returns the corresponding color value.
     """
     cmap = cm.get_cmap( name )
     val_range = max_val - min_val
@@ -125,15 +163,18 @@ def index_from_counter( counter, rows, cols ):
     return ( row, col )
 
 
-def ax_from_counter( counter, axs ):
+def ax_from_counter( counter, axs, reverse = False ):
     """
     Gets an axis from an array of axes based on a counter.
 
     :param counter: Counter.
     :param axs: Matrix of axes.
+    :param reverse: Reverse order of axes. [Defualt: False]
     :returns: Axis.
     """
     row, col = index_from_counter( counter, *axs.shape )
+    if reverse:
+        row = axs.shape[ 0 ] - 1 - row
 
     if len( axs.shape ) == 1:
         # only rows
@@ -159,7 +200,7 @@ def rows_needed( df, cols = 1, level = None, axis = 1 ):
     :param axis: Axis to determine rows from.
         Not applicable if `df` is not DataFrame.
         [Default: 1]
-    :returns: Number of rows needed for iterating over the data frame given the number of columns.
+    :returns: Number of rows needed for iterating over the data given the number of columns.
     """
     if (
         isinstance( df, pd.core.groupby.DataFrameGroupBy ) or
@@ -187,7 +228,60 @@ def rows_needed( df, cols = 1, level = None, axis = 1 ):
     return int( np.ceil( num_plots/ cols ) )
 
 
-def plot_levels( plot, df, show = True, level = 'metrics', axis = 1, **fig_args ):
+def rows_cols_square( df, level = None, axis = 1 ):
+    """
+    Returns the number of rows and columns needed to
+    create a square set of axes for the data.
+
+    :param df: DataFrame, DataFrameGroupBy, Series, or SeriesGroupBy.
+    :param level: DataFrame level to use for grouping,
+        or None to count each column.
+        If `df` is a DataFrameGroupBy or SeriesGroupBy this does not have an effect.
+        [Default: None]
+    :param axis: Axis to determine rows from.
+        Not applicable if `df` is not DataFrame.
+        [Default: 1]
+    :returns: Tuple of ( rows, cols ) needed for iterating over the data.
+    """
+    if (
+        isinstance( df, pd.core.groupby.DataFrameGroupBy ) or
+        isinstance( df, pd.core.groupby.SeriesGroupBy )
+    ):
+        num_plots = len( df )
+
+    elif (
+        isinstance( df, pd.DataFrame ) or
+        isinstance( df, pd.Series )
+    ):
+        if isinstance( df, pd.Series ):
+            axis = 0
+
+        if level is not None:
+            num_plots = df.axes[ axis ].get_level_values( level ).unique().shape[ 0 ]
+
+        else:
+            num_plots = df.axes[ axis ].shape[ 0 ]
+
+    else:
+        # invalid type
+        raise TypeError( 'Invalid `df` object. Must be a pandas DataFrame, DataFrameGroupBy, Series, or SeriesGroupBy.' )
+
+    sqrt = num_plots**( 1/2 )
+    rows = int( np.ceil( sqrt ) )
+    cols = int( np.round( sqrt ) )
+
+    return ( rows, cols )
+
+
+def plot_levels(
+    plot,
+    df,
+    show = True,
+    level = 'metrics',
+    axis = 1,
+    flip_axes = False,
+    **fig_args
+    ):
     """
     Plots each element of a Pandas DataFrame in a separate subplot.
 
@@ -196,6 +290,8 @@ def plot_levels( plot, df, show = True, level = 'metrics', axis = 1, **fig_args 
     :param show: Show the plot. [Defualt: True]
     :param level: Which level to iterate over. [Default: 'metrics']
     :param axis: The axis to iterate over. [Default: 'columns']
+    :param flip_axes: Flip the order of the axes, plotting from the bottom first.
+        [Default: False]
     :param fig_args: Keyword arguments passed to plt.subplot().
     :returns: The Figure and Axes of the plot as a tuple ( fig, axs ).
     """
@@ -217,7 +313,7 @@ def plot_levels( plot, df, show = True, level = 'metrics', axis = 1, **fig_args 
     index = 0
 
     for name, data in groups:
-        ax = ax_from_counter( index, axs )
+        ax = ax_from_counter( index, axs, reverse = flip_axes )
         plot( ax, data, name )
         index += 1
 

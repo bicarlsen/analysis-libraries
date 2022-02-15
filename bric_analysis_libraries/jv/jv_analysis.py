@@ -332,7 +332,7 @@ def get_voc( df, fit_window = 20 ):
     :returns: A Pandas Series of open circuit voltages.
     """
     roots = std.df_find_index_of_value( df, 0, fit_window = fit_window, polydeg = 1 )
-    voc = roots[ 0 ]
+    voc = roots[ 'index' ].astype( np.float64 )
     return voc.rename( 'voc' )
 
 
