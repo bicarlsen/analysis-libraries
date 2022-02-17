@@ -972,6 +972,9 @@ def df_find_index_of_value( df, value, fit_window = 20, polydeg = 1 ):
             or None if the fit was not needed due to an exact match 
             or did not converge.
     """
+    if isinstance( df, pd.Series ):
+        df = df.to_frame()
+
     df = df.sort_index()
 
     val_index = pd.DataFrame( index = df.columns, columns = ( 'index', 'fit' ) )
@@ -999,7 +1002,11 @@ def df_find_index_of_value( df, value, fit_window = 20, polydeg = 1 ):
 
         else:
             # one sided data
-            tdf = dneg.iloc[ -fit_window: ] if dneg.shape[ 0 ] else dpos.iloc[ :fit_window ]
+            tdf = (
+                dneg.iloc[ : fit_window ]
+                if dneg.shape[ 0 ] else
+                dpos.iloc[ -fit_window : ]
+            )
 
         if tdf.shape[ 0 ] < 3:
             val_index.loc[ name ] = [ np.nan, None ]
