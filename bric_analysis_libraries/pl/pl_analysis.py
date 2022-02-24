@@ -227,8 +227,12 @@ def center_of_mass( df ):
     :returns: Pandas Series of center of masses.
     """
     idx = df.index
-    weights = df/ df.sum()
-    com = weights.multiply( idx, axis = 0 ).sum()
+    total_weight = std.integrate_df( df )
+    weights = df/ total_weight
+    
+    com = weights.multiply( idx, axis = 0 )
+    com = std.integrate_df( com )
+
     return com.rename( 'com' )
 
 
