@@ -219,11 +219,13 @@ def peak_position( df, start = None, end = None ):
     return peak.rename( 'peak' )
 
 
-def center_of_mass( df ):
+def center_of_mass( df, abs = True ):
     """
     Retuns a Pandas Series of the center of mass for the spectra.
 
     :param df: DataFrame to calaculate the center of mass on.
+    :param abs: Take center of mass using absolute value of values.
+        [Default: True]
     :returns: Pandas Series of center of masses.
     """
     idx = df.index
