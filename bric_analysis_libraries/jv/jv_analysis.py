@@ -29,6 +29,13 @@ def ideal_diode( v, js, vt = 0.026, jp = 0 ):
     return js* ( np.exp( v/ vt ) - 1 ) - jp
 
 
+def solar_cell( v, jp, v0, vt ):
+    """
+
+    """
+    return  np.exp( ( v - v0 )/ vt ) - jp
+
+
 def voc_from_ideal_diode_parameters( js, vt, jp ):
     """
     Open circuit voltage from ideal diode parameters.
@@ -53,10 +60,14 @@ def fit_jv_data( df, func = ideal_diode, **fitargs ):
     """
     if 'guess' not in fitargs:
         # default guess
-        fitargs[ 'guess' ] = lambda x: ( 0, 0.026, x.min() )
+        fitargs[ 'guess' ] = lambda x: (
+            x.mean(),
+            0,
+            0.026
+        )
 
     fit = std.df_fit_function(
-        ideal_diode,
+        solar_cell,
         **fitargs
     )
 
@@ -295,27 +306,37 @@ def get_jsc( df, fit_window = 20 ):
     :param fit_window: Window size to extrapolate if needed. [Default: 20]
     :returns: A Pandas Series of short circuit currents.
     """
+    if isinstance( df, pd.Series ):
+        df = df.to_frame()
+        
     df = df.sort_index()
 
     jsc = pd.Series( index = df.columns, dtype = np.float64 )
     for name, data in df.items():
         data = data.dropna()
-        if 0 in data:
+        if 0 in data.index:
             # jsc in data
             jsc[ name ] = data[ 0 ]
             continue
 
-        dpos = data[ 0: ].dropna()
-        dneg = data[ :0 ].dropna()
+        dpos = data[ data.index > 0 ].dropna()
+        dneg = data[ data.index < 0 ].dropna()
 
         if ( dpos.shape[ 0 ] and dneg.shape[ 0 ] ):
             # data on both sides of zero
             half_window = int( fit_window/ 2 )
-            tdf = pd.concat( [ dneg.iloc[ -half_window: ], dpos.iloc[ :half_window ] ] )
+            tdf = pd.concat( [
+                dneg.iloc[ -half_window: ],
+                dpos.iloc[ :half_window ]
+            ] )
 
         else:
             # one sided data
-            tdf = dpos.iloc[ :fit_window ] if dpos.shape[ 0 ] else dneg.iloc[ -fit_window: ]
+            tdf = (
+                dpos.iloc[ :fit_window ] 
+                if dpos.shape[ 0 ] else
+                dneg.iloc[ -fit_window: ]
+            )
 
         fit = linregress( tdf.index, tdf.values )
         jsc[ name ] = fit.intercept
@@ -336,7 +357,11 @@ def get_voc( df, fit_window = 20 ):
     return voc.rename( 'voc' )
 
 
-def get_metrics( df, generator = False ):
+def get_metrics(
+    df,
+    generator = False,
+    fit_window = 20
+):
     """
     Creates a Pandas DataFrame containing metric about JV curves.
     Metrics include maximum power point (vmpp, jmpp, pmpp), open circuit voltage,
@@ -345,9 +370,15 @@ def get_metrics( df, generator = False ):
     :params df: DataFrame containing the JV curves, indexed by voltage.
     :param generator: Is the JV scan of a consumer (quadrants 2 and 4) or generator (quadrants 1 and 3).
         [Default: False]
+    :param fit_window: Window size to extrapolate or fit if needed. [Default: 20]
     :returns: A Pandas DataFrame containing information about the curves.
     """
-    metrics = [ get_mpp( df, generator ), get_voc( df ), get_jsc( df ) ]
+    metrics = [
+        get_mpp( df, generator ),
+        get_voc( df, fit_window = fit_window ),
+        get_jsc( df, fit_window = fit_window )
+    ]
+    
     metrics = pd.concat( metrics, axis = 1 )
     metrics = metrics.assign( ff = lambda x: x.pmpp/ ( x.voc* x.jsc )  )
 

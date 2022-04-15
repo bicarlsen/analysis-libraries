@@ -4,12 +4,19 @@ import re
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 
 from . import common
 from .. import standard_functions as std
 
 
-def import_eb_data( file, separator = '\t', remove_header_units = True, encoding = 'iso-8859-1' ):
+def import_eb_data(
+    file,
+    separator = '\t',
+    remove_header_units = True,
+    encoding = 'iso-8859-1'
+):
     """
     Import an energy band data from SCAPS.
 
@@ -248,3 +255,92 @@ def metric_sections( content, names = None, section_break = '\n{4}', separator =
         )
     
     return sections
+
+
+def plot_band_diagram( edf, model = None, ax = None, **kwargs ):
+    """
+    Plot the energy band diagram.
+
+    :param edf: Energy band DataFrame.
+    :param model: A scaps.Model, used to color the background of each layer.
+        [Default: None]
+    :param ax: matplotlib.pyplot.Axes to plot on. If None a new one will be created.
+        [Default: None]
+    :param **kwargs: Additional plotting arguments.
+    :returns: Tuple of ( ax, fig ) on which the diagram is plotted.
+    """
+    # data setup
+    htl, pvk, etl = model.layers
+    edf = edf[[ 'Ec', 'Fn', 'Fp', 'Ev' ]]
+
+    # original 0 energy is leftmost hole quasi-Fermi level
+    # off set to left most perovskite valence band 
+    edf_idx = edf.index.values
+    t_htl = htl.thickness.value* 1e6
+    pvk_start_x = edf_idx[ edf_idx > t_htl ].min()
+
+    e_offset = edf.loc[ pvk_start_x, 'Ev' ].mean()
+
+    edf -= e_offset
+    edf.index *= 1e3
+
+    # plotting
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    # energy bands
+    edf.plot(
+        ax = ax,
+        color = ( 'C0', '#444', '#444', 'C3' ),
+        **kwargs
+    )
+
+    if model is None:
+        return ( ax.figure, ax )
+
+    # model background
+    x_scale = 1e9
+    y0 = edf.min().min()
+    h = edf.max().max() - y0
+    bg_alpha = 0.25
+
+    # htl
+    x = 0
+    w = htl.thickness.value* x_scale
+    r_htl = patches.Rectangle(
+        ( x, y0 ), w, h,
+        facecolor = 'C3', alpha = bg_alpha,
+        zorder = 0
+    )
+    ax.add_patch( r_htl )
+
+    # perovskite
+    x += w
+    w = pvk.thickness.value* x_scale
+    r_pvk = patches.Rectangle(
+        ( x, y0 ), w, h,
+        facecolor = '#444', alpha = bg_alpha,
+        zorder = 0
+    )
+    ax.add_patch( r_pvk )
+
+    # etl
+    x += w
+    w = etl.thickness.value* x_scale
+    r_etl = patches.Rectangle(
+        ( x, y0 ), w, h,
+        facecolor = 'C0', alpha = bg_alpha,
+        zorder = 0
+    )
+    ax.add_patch( r_etl )
+
+    ax.legend( [
+        'E$_\mathregular{c}$',
+        'F$_\mathregular{n}$',
+        'F$_\mathregular{p}$',
+        'E$_\mathregular{v}$'
+    ] )
+    ax.set_xlabel( 'x / nm' )
+    ax.set_ylabel( 'Energy / eV' )
+
+    return ( ax.figure, ax )

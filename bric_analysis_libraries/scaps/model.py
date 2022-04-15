@@ -18,8 +18,9 @@ import typing
 def get_problem_definition_from_file( file, comment = '>' ):
 	"""
 	:param file: Path to file containing a SCAPS problem definition.
+		Usually as .scaps file.
 	:param comment: Comment character. [Default: '>']
-	:return: Content reprenesting the problem definition.
+	:return: Content representing the problem definition.
 	"""
 	start_pattern = '>> begin of problem definition file'
 	end_pattern = '>> end of problem definition file'
@@ -291,6 +292,7 @@ class EnergyDistribution( Enum ):
 	Energy distribution profiles.
 	"""
 	single = 'single'
+	gauss = 'gauss'
 
 
 class ModelType( Enum ):
@@ -355,7 +357,6 @@ class Defect():
 
 	energy_distribution: EnergyDistribution
 	energy_reference: typing.Union[ InterfaceDefectEnergyRef, BulkDefectEnergyRef ]
-
 
 
 @dataclass

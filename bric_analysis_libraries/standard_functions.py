@@ -851,9 +851,15 @@ def df_fit_function( fcn, param_names = None, guess = None, modify = None, **kwa
                 fit[ 0 ]
             ) )
 
+            variances = fit[ 1 ].diagonal()
+            stds = [
+                np.sqrt( v ) if ( v > 0 ) else np.nan
+                for v in variances
+            ]
+            
             stds = dict( zip(
                 [ ( param, 'std' ) for param in param_names ],
-                np.sqrt( fit[ 1 ].diagonal() )
+                stds
             ) )
 
             params.update( stds )
@@ -1017,18 +1023,22 @@ def df_find_index_of_value( df, value, fit_window = 20, polydeg = 1 ):
             fit = Polynomial.fit( tdf.index, tdf.values - value, deg = polydeg )  # shift values so value is a root
             
         except Exception as err:
-            print( err )
+            print( f'[{name}] {err}' )
             val_index.loc[ name ] = [ np.nan, None ]
 
         else:
             roots = fit.roots()
+            if roots.shape[ 0 ] == 0:
+                # no roots found
+                val_index.loc[ name ] = [ np.nan, None ]
+                continue
 
             # find root nearest to index values
             root_dists = [
                 np.abs( tdf.index - root ).min()
                 for root in roots
             ]
-            root = roots[ np.argmin( root_dists) ]
+            root = roots[ np.argmin( root_dists ) ]
         
             val_index.loc[ name ] = [ root, fit ]
 

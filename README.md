@@ -137,7 +137,7 @@ Functions for analyzing [SCAPS](https://scaps.elis.ugent.be/) simulation results
 #### Common
 > Module name: `common`
 
-Common functions.
+Common functions with low level functionality.
 
 #### General
 > Module name: `gnr`
@@ -157,7 +157,12 @@ Formats energy band data into Pandas DataFrames.
 #### Generation and Recombination
 > Module name: `gen`
 
-Formats generation and recombination band data into Pandas DataFrames.
+Formats generation and recombination and data into Pandas DataFrames.
+
+#### Model
+> Module name: `model`
+
+For analyzing models.
 
 ---
 

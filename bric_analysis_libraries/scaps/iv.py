@@ -264,6 +264,7 @@ def import_cell_parameters( file, encoding = 'iso-8859-1', remove_header_units =
     df = pd.Series( data = data, index = index )
     return df
 
+
 def import_batch_characterization_parameters( file, encoding = 'iso-8859-1', remove_header_units = True ):
     """
     Import characterization parameters of a batch experiment.
@@ -274,7 +275,7 @@ def import_batch_characterization_parameters( file, encoding = 'iso-8859-1', rem
         [Default: True]
     :returns: Pandas DataFrame of characterization parameters indexed by batch parameters.
     """
-    with open( file ) as f:
+    with open( file, encoding = encoding ) as f:
         h_data, v_data = common.split_content_header_data( f.read() )
 
     # create data frame

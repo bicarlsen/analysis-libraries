@@ -12,7 +12,8 @@ from .. import standard_functions as std
 def import_gen_data(
     file,
     remove_header_units = True,
-    separator = '\t'
+    separator = '\t',
+    encoding = 'iso-8859-1'
 ):
     """
     Import a generation-recombination data file from SCAPS.
@@ -22,7 +23,7 @@ def import_gen_data(
     :param separator: Data separator. [Default: '\t']
     :returns: DataFrame representing the data.
     """
-    with open( file ) as f:
+    with open( file, encoding = encoding ) as f:
         content = f.read().strip()
 
     header_pattern = f'\s*x\s*\(.m\)\s*{separator}'

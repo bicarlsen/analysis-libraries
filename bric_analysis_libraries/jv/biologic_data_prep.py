@@ -1,9 +1,6 @@
-
 # coding: utf-8
 
-# # Biologic Data Prep
-
-# ### Imports
+# Biologic Data Prep
 
 import os
 import logging
@@ -14,11 +11,7 @@ import pandas as pd
 from .. import standard_functions as std
 from . import jv_data_prep as jvdp
 
-# ## Data Prep
 
-# ### Imports
-
-# convenience methods
 def channel_from_file_path( path, pattern = 'ch-<>' ):
     """
     Gets the channel from the file path.
@@ -38,7 +31,6 @@ def channel_from_file_path( path, pattern = 'ch-<>' ):
     return int( ch )
 
 
-# convenience methods
 def cycle_from_file_path( path, pattern = 'cycle-<>' ):
     """
     Gets the cycle from the file path.
@@ -293,7 +285,7 @@ def import_mpp_cycle_data( folder, voc_kwargs = {}, jv_kwargs = {}, mpp_kwargs =
 
 
 
-# ### Manipulation
+# Manipulation
 
 
 def align_cycles( df ):
@@ -331,8 +323,7 @@ def split_by_time( df, interval, inplace = False ):
     pass
 
 
-# ## Old Import Methods
-
+# Old Import Methods
 
 def import_voc_datum_channel( file, channel_pattern = 'ch-<>', set_index = True, skiprows = 2 ):
     """
