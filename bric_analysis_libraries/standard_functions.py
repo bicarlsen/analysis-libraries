@@ -101,7 +101,7 @@ def metadata_from_file_name(
     :param group: The match index to return. If 'all' returns all matches. [Default: 0]
     :param full_path: Use the full file path instead of only the base name. [Default: False]
     :param abs_path: Use the absolute file path instead of only the base name. [Default: False]
-    :param extension: Defines hwo the extension should be processed.
+    :param extension: Defines how the extension should be processed.
         If None or False, no extension processing occurs.
         If True, the last portion of the file name, separated by '.', is assumed to be the extension.
         If a string, removes the extension if it occurs at the end of the file name. Should include '.'.
@@ -388,7 +388,7 @@ def common_reindex(
     index = None,
     how = 'slinear',
     how_order = None,
-    fillna = 0,
+    fillna = np.nan,
     add_values = None,
     name = None,
     duplicates = None
@@ -400,12 +400,13 @@ def common_reindex(
     :param dfs: An single or iterable collection of DataFrames.
     :param index: The column to use as the index values, or None to use the index. 
         [Default: None]
-    :param how: How to interpolate data at new index values. 
+    :param how: How to interpolate data at new index values.
+        If None, do not interpolate. Data is filled with numpy.nan.
         [See Pandas.DataFrame#interpolate for values]
         [Default: 'slinear']
     :param how_order: Order of the interpolation method if required.
         [Default: None]
-    :param fillna: Value to fill NaN values with. [Default: 0]
+    :param fillna: Value to fill NaN values with. [Default: numpy.nan]
     :param add_values: A list of index values to manually add. [Default: None]
     :param name: The index name. If None uses the name of the first DataFrame. [Default: None]
     :param duplicates: Function to reduce duplicate index values, or None to raise Exception.
@@ -443,13 +444,17 @@ def common_reindex(
     combined_index = pd.Index( combined_index, name = name )
 
     # reindex data
-    dfs = [
-        df.reindex( combined_index ).interpolate( method = how, limit_area = 'inside', order = how_order )
-        for df in dfs
-    ]
+    dfs = [ df.reindex( combined_index ) for df in dfs ]
 
-    if fillna is not False:
-        dfs = [ df.fillna( fillna ) for df in dfs ]
+    # interpolate data
+    if how is not None:
+        dfs = [
+            df.interpolate( method = how, limit_area = 'inside', order = how_order )
+            for df in dfs
+        ]
+
+        if fillna is not False:
+            dfs = [ df.fillna( fillna ) for df in dfs ]
 
     return dfs
 
@@ -781,7 +786,7 @@ def import_dataframe( path ):
 
 # DataFrame data functions
 
-def df_fit_function( fcn, param_names = None, guess = None, modify = None, **kwargs ):
+def df_fit_function( fcn, param_names = None, guess = None, sigma = None, modify = None, **kwargs ):
     """
     Returns a function that fits a pandas DataFrame to a function.
     Errors that occur are output at the logging.INFO level.
@@ -794,6 +799,9 @@ def df_fit_function( fcn, param_names = None, guess = None, modify = None, **kwa
         It should accept a Pandas Series containing the data and return a
         tuple of the parameter predictions. 
         [Default: All 1]
+    :param sigma: A function used to produce sigma values for each data set.
+        Should accept a Pandas Series containing the data and return an
+        iterable of sigma values.
     :param modify: A function run before the fitting on the DataFrame.
     :param kwargs: Additional parameters to be passed to scipy.optimize.curve_fit().
     :returns: A function that accepts a Pandas DataFrame and 
@@ -806,6 +814,12 @@ def df_fit_function( fcn, param_names = None, guess = None, modify = None, **kwa
     param_names = inspect.getfullargspec( fcn ).args[ 1: ] if param_names is None else param_names
 
     def fitter( df ):
+        """
+        Returns fits of a DataFrame given its construction.
+
+        :param df: DataFrame to fit.
+        :returns: DataFrame of fits.
+        """
         fits = []
         mdf = df if modify is None else modify( df )
 
@@ -826,6 +840,7 @@ def df_fit_function( fcn, param_names = None, guess = None, modify = None, **kwa
         for col, data in mdf.items():
             data = data.dropna()
             initial = guess( data ) if callable( guess ) else guess
+            sigs = sigma( data ) if callable( sigma ) else sigma
 
             with warnings.catch_warnings( record = True ) as w:
                 warnings.filterwarnings( 'error' )
@@ -851,9 +866,15 @@ def df_fit_function( fcn, param_names = None, guess = None, modify = None, **kwa
                 fit[ 0 ]
             ) )
 
+            variances = fit[ 1 ].diagonal()
+            stds = [
+                np.sqrt( v ) if ( v > 0 ) else np.nan
+                for v in variances
+            ]
+            
             stds = dict( zip(
                 [ ( param, 'std' ) for param in param_names ],
-                np.sqrt( fit[ 1 ].diagonal() )
+                stds
             ) )
 
             params.update( stds )
@@ -972,6 +993,9 @@ def df_find_index_of_value( df, value, fit_window = 20, polydeg = 1 ):
             or None if the fit was not needed due to an exact match 
             or did not converge.
     """
+    if isinstance( df, pd.Series ):
+        df = df.to_frame()
+
     df = df.sort_index()
 
     val_index = pd.DataFrame( index = df.columns, columns = ( 'index', 'fit' ) )
@@ -999,7 +1023,13 @@ def df_find_index_of_value( df, value, fit_window = 20, polydeg = 1 ):
 
         else:
             # one sided data
-            tdf = dneg.iloc[ -fit_window: ] if dneg.shape[ 0 ] else dpos.iloc[ :fit_window ]
+            tdf = dneg if dneg.shape[ 0 ] else dpos
+            ldf = tdf.iloc[ : fit_window ]
+            rdf = tdf.iloc[ -fit_window : ]
+            
+            l_diff = abs( ldf.mean() - value )
+            r_diff = abs( rdf.mean() - value )
+            tdf = ldf if ( l_diff < r_diff ) else rdf
 
         if tdf.shape[ 0 ] < 3:
             val_index.loc[ name ] = [ np.nan, None ]
@@ -1010,18 +1040,22 @@ def df_find_index_of_value( df, value, fit_window = 20, polydeg = 1 ):
             fit = Polynomial.fit( tdf.index, tdf.values - value, deg = polydeg )  # shift values so value is a root
             
         except Exception as err:
-            print( err )
+            print( f'[{name}] {err}' )
             val_index.loc[ name ] = [ np.nan, None ]
 
         else:
             roots = fit.roots()
+            if roots.shape[ 0 ] == 0:
+                # no roots found
+                val_index.loc[ name ] = [ np.nan, None ]
+                continue
 
             # find root nearest to index values
             root_dists = [
                 np.abs( tdf.index - root ).min()
                 for root in roots
             ]
-            root = roots[ np.argmin( root_dists) ]
+            root = roots[ np.argmin( root_dists ) ]
         
             val_index.loc[ name ] = [ root, fit ]
 

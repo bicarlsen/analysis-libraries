@@ -1,5 +1,6 @@
 # ARS Cryostat Data Prep
 
+import numpy as np
 import pandas as pd
 
 from .. import standard_functions as std
@@ -11,7 +12,7 @@ def calibrate_temperatures( df, substrate, axis = 1, level = 'temperature' ):
 	Calibration factors found using high quality FAPbI3 on different substrates
 	referencing room temperature and phase tranisition aas seen in PL measurements.
 
-	:param df: pandas DataFrame or Series to calibrate.
+	:param df: pandas DataFrame or Series, or numpy.ndarray to calibrate.
 	:param substrate: Substrate used.
 		Valid substrate values:
 		+ 'glass': Microscope glass. [scale: 5/7, lower: 90, upper: 300]
@@ -42,8 +43,14 @@ def calibrate_temperatures( df, substrate, axis = 1, level = 'temperature' ):
 	params = sub_params[ substrate ]
 	convert = lambda T: ( T - params[ 'ref' ] )* params[ 'scale' ] + true_ref
 
-	# get index to convert
-	index = df.axes[ axis ]
+	if isinstance( df, np.ndarray ):
+		index = df
+		is_index = False
+
+	else:
+		# get index to convert
+		index = df.axes[ axis ]
+		is_index = True
 
 	# convert and recreate index
 	if isinstance( index, pd.MultiIndex ): 
@@ -61,6 +68,11 @@ def calibrate_temperatures( df, substrate, axis = 1, level = 'temperature' ):
 		# basic index
 		c_index = convert( index )
 	
+	if not is_index:
+		# array
+		return c_index
+
+	# DataFrame or Series
 	if ( axis == 0 ) or ( axis == 'index' ):
 		df.index = c_index
 

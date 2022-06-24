@@ -70,6 +70,9 @@ def get_scaled_colormap( name, min_val = 0, max_val = 1, raise_err = False ):
     :returns: Function that accepts an argument of the value,
         and returns the corresponding color value.
     """
+    if min_val >= max_val:
+        raise ValueError( '`min_val` is less or equal to `max_val`.' )
+
     cmap = cm.get_cmap( name )
     val_range = max_val - min_val
     def _scaled_map( val ):
@@ -155,7 +158,13 @@ def index_from_counter( counter, rows, cols ):
     :param rows: Number of rows in matrix.
     :param cols: Number of columns in matrix.
     :returns: ( row, column ) of counter.
+    :raises: ValueError if `counter` is invalid.
     """
+    if counter < 0:
+        raise ValueError( 'Counter must be a non-negative integer.' )
+
+    if counter > rows* cols:
+        raise ValueError( 'Counter exceeds total grid size.' )
 
     row = int( np.floor( counter / cols ) )
     col = int( counter % cols )
@@ -409,11 +418,11 @@ def temperature_plot_rainbow(
     :param colorbar: Whether to include the color bar legend. [Default: True]
     :param level: Index or name of the level used for coloring. [Default: 0]
     :param ax: Axis to plot on. If None, creates one. [Default: None]
-    :param color_by_order: Color traces by order of values, rather than actual value.
+    :param color_by_order: Color traces by order of values rather than actual value.
         [Default: False]
     :param cmap: Colormap to use. [Defualt: 'jet']
     :param **kwargs: Arguments passed to pandas.DataFrame#plot
-    :returns: Tuple of ( fig, ax ) if colorbar is False,
+    :returns: Tuple of ( fig, ax, None ) if colorbar is False,
         or ( fig, axs, cbar ) if colorbar is True.
     """
     is_df = isinstance( df, pd.DataFrame )
@@ -432,7 +441,11 @@ def temperature_plot_rainbow(
     val_min = temp_vals.min()
     val_max = temp_vals.max()
     
-    cm = plt.get_cmap( cmap )
+    cm = (
+        plt.get_cmap( cmap )
+        if isinstance( cmap, str ) else
+        cmap
+    )
 
     if color_by_order:
         # color by vlaue index
@@ -450,7 +463,7 @@ def temperature_plot_rainbow(
     else:
         # color by value
         colors = [
-            cm( ( temp_val - val_min )/( val_max - val_min ) )  # normalize values sbetween 0 and 1
+            cm( ( temp_val - val_min )/( val_max - val_min ) )  # normalize values between 0 and 1
             for temp_val in temp_vals
         ]
 
@@ -461,11 +474,11 @@ def temperature_plot_rainbow(
         cbar = mpl.colorbar.ColorbarBase(
             ax = cax,
             cmap = cm,
+            orientation = 'vertical',
             norm = mpl.colors.Normalize(
                 vmin = val_min,
                 vmax = val_max
-            ),
-            orientation = 'vertical'
+            )
         )
 
         if is_df:
@@ -488,7 +501,7 @@ def temperature_plot_rainbow(
         return ( fig, ax, cbar )
 
     else:
-        return ( fig, ax )
+        return ( fig, ax, None )
 
 
 def color_plot_2d(
@@ -513,7 +526,8 @@ def color_plot_2d(
         If None creates a new axis.
         [Default: None]
     :param **kwargs: Args passed to the plotting function.
-    :returns: ( img, axs, fig )
+    :returns: ( fig, ax, cbar, img )
+        If `colorbar` is False, cbar is None.
     :raises TypeError: If DataFrame's index or columns are not a pandas.Index.
     :raises ValueError: If `shading` is not valid. 
     """
@@ -526,33 +540,24 @@ def color_plot_2d(
     if shading not in [ 'nearest', 'gouraud' ]:
         raise ValueError( 'Invalid shading value. Must be in [ "nearest", "gouraud" ].' )
 
+    cbar = None
     x, y = np.meshgrid( df.columns, df.index )
 
     if ax is not None:
-        img = ax.pcolormesh( x, y, df.values, shading = shading, **kwargs )
-        
-        if colorbar:
-            plt.colorbar( img, ax = ax )
-        
         fig = ax.get_figure()
-        return ( img, ax, fig )
-
-    img = plt.pcolormesh( x, y, df.values, shading = shading, **kwargs )
     
-    fig = img.get_figure()
+    else:    
+        fig, ax = plt.subplots()
+    
+    img = ax.pcolormesh( x, y, df.values, shading = shading, **kwargs )
+    
     if colorbar:
-        fig.colorbar( img )
-
-    axs = fig.get_axes()
-    ax = axs[ 0 ]
+        cbar = fig.colorbar( img, ax = ax )
+    
     ax.set_xlabel( df.columns.name )
     ax.set_ylabel( df.index.name )
 
-    if not colorbar:
-        # only one axes, pick it
-        axs = axs[ 0 ]
-
-    return ( img, axs, fig )
+    return ( fig, ax, cbar, img )
 
 
 def outer_plot(

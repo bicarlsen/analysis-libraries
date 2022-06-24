@@ -378,10 +378,3 @@ def assign_temperatures_to_cycles( df, ctrl ):
     temperatures = pd.concat( temps )
 
     return temperatures
-
-
-# ## Work
-
-
-
-
