@@ -130,7 +130,7 @@ Methods for analyzing blackbody characteristics of PL spectra.
 ---
 
 ### SCAPS Component
-> Component name: `scaps`
+> Moved to the [PySCAPS package](https://pypi.org/project/pyscaps/).
 
 Functions for analyzing [SCAPS](https://scaps.elis.ugent.be/) simulation results.
 
