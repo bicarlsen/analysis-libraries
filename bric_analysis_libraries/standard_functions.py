@@ -23,7 +23,14 @@ import pandas as pd
 import scipy as sp
 import scipy.constants as phys
 from scipy.optimize import curve_fit
-from scipy.integrate import trapezoid
+
+scipy_ver = sp.__version__
+if sp.__version__ < '1.6.0':
+    # in versions < 1.6.0 `trapezoid` is named `trapz`
+    from scipy.integrate import trapz as trapezoid
+
+else:
+    from scipy.integrate import trapezoid
 
 
 # Helper functions
